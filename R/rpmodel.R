@@ -233,8 +233,10 @@ rpmodel_lt <- function(
         returnvar = NULL,
         verbose = FALSE)
       #Latent Heat Loss calculation
+      if(is.na(df_res$gs)){df_res$gs = 0}
+      if(length(df_res$gs) == 0){df_res$gs = 0}
+      if(is.infinite(df_res$gs)){df_res$gs = 100} 
       gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
-      if(is.infinite(gs)){gs = 100} 
       if(!is.na(u)&!is.na(canopy_height)){
         gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height) *patm/mol_gas_const/tk #mol m-2 s-1
         gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
@@ -256,14 +258,15 @@ rpmodel_lt <- function(
       Qtir = epsleaf*epssky*sigma*tk^4
       
       #Thermal Infra-Red Losses
-      Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+      Qtirleaf = epsleaf*sigma*tkleaf^4
+      # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
       
       #Convective Heat Exchange
       Qc = gbh*cpm*(tcleaf_root-tc)
       
       Qsw + Qtir - Qtirleaf - Qc - lE
     },
-    c(-60, 60))$root
+    c(tc-15, tc+15))$root
     
     tcleaf = tcleaf_new
     tkleaf = tcleaf+273.15
