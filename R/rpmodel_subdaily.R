@@ -1,4 +1,4 @@
-## Original code Giulia Mengoli
+## Original code Giulia Mengoli Victor Flo
 
 #' Invokes a P-model function call for sub-daily estimations accounting for acclimation
 #'
@@ -426,8 +426,10 @@ rpmodel_subdaily <- function(
         if(length(df_res$gs) == 0){df_res$gs = 0}
         if(is.infinite(df_res$gs)){df_res$gs = 100} 
         gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
-        if(!is.na(x$u)&!is.na(x$canopy_height)){
-          gb = 1/resistance_neutral(ws_mean=x$u, canopy_height = x$canopy_height) * x$patm/mol_gas_const/tk #mol m-2 s-1
+        Hs = gs*cpm*(tcleaf_root-x$tc)
+        if(!is.na(x$u)&!is.na(x$canopy_height)&!is.na(x$Tc)&!is.na(x$z)&!is.na(x$LAI)){
+          # gb = 1/resistance_neutral(ws_mean=x$u, canopy_height = x$canopy_height) * x$patm/mol_gas_const/tk #mol m-2 s-1
+          gb = calc_ga(ws_mean=x$u, canopy_height = x$canopy_height,Hs,x$Tc,x$z,x$LAI) * x$patm/mol_gas_const/tk #mol m-2 s-1
           gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
           gbs = gs * gb/(gs + gb)
         }else{
@@ -444,11 +446,11 @@ rpmodel_subdaily <- function(
         
         #Thermal Infrared Input
         epssky = 1.72 * ((ea*1e-3)/tk)^0.143
-        Qtir = epsleaf*epssky*sigma*tk^4
+        Qtir = epsleaf*epssky*sigma*(tk^4 + tk^4) #sky and air
         
         #Thermal Infra-Red Losses
-        Qtirleaf = epsleaf*sigma*tkleaf^4
-        # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+        # Qtirleaf = epsleaf*sigma*tkleaf^4
+        Qtirleaf = 2*epsleaf*sigma*tkleaf^4
         
         #Convective Heat Exchange
         Qc = gbh*cpm*(tcleaf_root-x$tc)

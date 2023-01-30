@@ -255,11 +255,11 @@ rpmodel_lt <- function(
       
       #Thermal Infrared Input
       epssky = 1.72 * ((ea*1e-3)/tk)^0.143
-      Qtir = epsleaf*epssky*sigma*tk^4
+      Qtir = epsleaf*epssky*sigma*(tk^4 + tk^4) #sky and air
       
       #Thermal Infra-Red Losses
-      Qtirleaf = epsleaf*sigma*tkleaf^4
-      # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+      # Qtirleaf = epsleaf*sigma*tkleaf^4
+      Qtirleaf = 2*epsleaf*sigma*tkleaf^4
       
       #Convective Heat Exchange
       Qc = gbh*cpm*(tcleaf_root-tc)

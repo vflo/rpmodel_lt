@@ -53,7 +53,8 @@ data_flx <- tibble(timestamp=ind) %>% cbind(as_tibble(fluxnet_data))
 # soil_site <- getSoilSite(stations_md$LAT[3],stations_md$LON[3])
 
 data_flx <- data_flx %>% 
-  mutate(T_CANOPY = rowMeans(select(data_flx,starts_with("T_CANOPY")),na.rm=TRUE),
+  mutate(T_CANOPYsd = matrixStats::rowSds(as.matrix(select(data_flx,starts_with("T_CANOPY"))),na.rm=TRUE),
+         T_CANOPY = rowMeans(select(data_flx,starts_with("T_CANOPY")),na.rm=TRUE),
          TA = rowMeans(select(data_flx,starts_with("TA_")),na.rm=TRUE),
          VPD = rowMeans(select(data_flx,starts_with("VPD")),na.rm=TRUE),
          PPFD_IN = rowMeans(select(data_flx,starts_with("PPFD_IN")),na.rm=TRUE),
@@ -62,11 +63,50 @@ data_flx <- data_flx %>%
          SW_IN = rowMeans(select(data_flx,starts_with("SW_IN")),na.rm=TRUE),
          CO2 = rowMeans(select(data_flx,starts_with("CO2")),na.rm=TRUE),
          PA = rowMeans(select(data_flx,starts_with("PA_")),na.rm=TRUE),
-         SWC = SWC_2_3_1,
-         LE = LE_2_1_1) %>%
-  dplyr::select(timestamp,T_CANOPY,TA,VPD,PPFD_IN,LEAF_WET,WS,SW_IN,SWC,LE,CO2,PA) %>% 
-  na.omit()
+         LE = rowMeans(select(data_flx,starts_with("LE_")),na.rm=TRUE),
+         P = P_1_1_1,
+         SWC = SWC_2_3_1) %>%
+  dplyr::select(timestamp,T_CANOPY,T_CANOPYsd,TA,VPD,PPFD_IN,LEAF_WET,WS,SW_IN,SWC,LE,CO2,PA,P) %>% 
+  na.omit(cols=c(1:13))
   # filter(!is.na(T_CANOPY),!is.na(TA),!is.na(VPD),!is.na(PPFD_IN),!is.na)
+
+res <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$TA, vpd = data_flx$VPD*100,co2 = data_flx$CO2,fapar = 0.9,
+                        ppfd = data_flx$PPFD_IN,u=data_flx$WS,canopy_height = 20, patm =data_flx$PA*1000, elv = 0)
+
+df_res <- as_tibble(res) %>% cbind(data_flx)
+
+dateRanges <- data.frame(
+  start = lubridate::as_date(df_res$timestamp) %>% lubridate::as_datetime() + 18*60*60,
+  end   = lubridate::as_date(df_res$timestamp) %>% lubridate::as_datetime() + 30*60*60 )%>%
+  slice(600:700)%>% 
+  dplyr::distinct()
+
+df_res %>%
+  slice(600:736) %>% 
+  ggplot() +
+  geom_line(aes(timestamp,T_CANOPY), color = "grey40")+
+  geom_ribbon(aes(timestamp,ymin=T_CANOPY - T_CANOPYsd, ymax=T_CANOPY + T_CANOPYsd),alpha = 0.2)+
+  geom_line(aes(timestamp,TA), color = "red")+
+  geom_line(aes(timestamp,tcleaf), color = "green")+
+  geom_rect(data = dateRanges, mapping = aes(xmin= start , xmax=end,ymin=-Inf,ymax=Inf), alpha=0.1, fill="black")+
+  geom_col(aes(timestamp,P))+
+  # geom_line(aes(timestamp,LEAF_WET/10), color = "purple")+
+  theme_bw()+
+  NULL
+
+df_res %>% 
+  ggplot()+
+  geom_point(aes(VPD*100,vpd_leaf))
+
+lat_heat = 2230 #J g^-1
+mol_mas_wv = 18.01528 #g mol-1
+df_res %>%
+  slice(700:900) %>% 
+  ggplot() +
+  geom_line(aes(timestamp,LE), color = "grey40")+
+  geom_line(aes(timestamp,lat_heat*mol_mas_wv*e*1.6*1e-6), color = "red")
+  
+
 
 
 # library(psych)
@@ -162,8 +202,7 @@ data_flx <- data_flx %>%
 
 
 
-res <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$TA, vpd = data_flx$VPD*1000,co2 = data_flx$CO2,fapar = 0.9,
-                 ppfd = data_flx$PPFD_IN,u=data_flx$WS,canopy_height = 20, patm =data_flx$PA*1000, elv = 0)
+
 
 
 
