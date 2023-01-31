@@ -32,7 +32,7 @@ filenames.fluxnet<- list.files(path="R/data", "*.csv$", full.names=TRUE,recursiv
 # sites<-c('AU-ASM','DE-RuR','ZA-Kru','GH-Ank','US-UMB')
 
 # stations_md<-subset(stations_md,stations_md$SITE_ID %in% sites)
-filename <- filenames.fluxnet[2]
+filename <- filenames.fluxnet[5]
 fluxnet_data <- data.table::fread(filename, header = T, 
                               quote = "\"", sep = ",", na.strings = c("NA", "-9999"), 
                               colClasses = "numeric", integer64 = "character")
@@ -70,24 +70,25 @@ data_flx <- data_flx %>%
   na.omit(cols=c(1:13))
   # filter(!is.na(T_CANOPY),!is.na(TA),!is.na(VPD),!is.na(PPFD_IN),!is.na)
 
-res <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$TA, vpd = data_flx$VPD*100,co2 = data_flx$CO2,fapar = 0.9,LAI = 1,
-                        ppfd = data_flx$PPFD_IN,u=data_flx$WS,canopy_height = 20, patm =data_flx$PA*1000, elv = 0, z = 40)
+res <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$TA, vpd = data_flx$VPD*100,co2 = data_flx$CO2,fapar = 0.9,LAI = 3,
+                        ppfd = data_flx$PPFD_IN,u=data_flx$WS, ustar = NA, canopy_height = 32, patm =data_flx$PA*1000, 
+                        elv = 538, z = 40)
 
 df_res <- as_tibble(res) %>% cbind(data_flx)
 
 dateRanges <- data.frame(
   start = lubridate::as_date(df_res$timestamp) %>% lubridate::as_datetime() + 18*60*60,
   end   = lubridate::as_date(df_res$timestamp) %>% lubridate::as_datetime() + 30*60*60 )%>%
-  slice(600:700)%>% 
+  slice(600:676)%>% 
   dplyr::distinct()
 
 df_res %>%
-  slice(590:746) %>% 
+  slice(590:700) %>% 
   ggplot() +
   geom_line(aes(timestamp,T_CANOPY), color = "grey40")+
   geom_ribbon(aes(timestamp,ymin=T_CANOPY - T_CANOPYsd, ymax=T_CANOPY + T_CANOPYsd),alpha = 0.2)+
   geom_line(aes(timestamp,TA), color = "red")+
-  geom_line(aes(timestamp,tcleaf), color = "green")+
+  geom_line(aes(timestamp,tcleaf), color = "blue")+
   geom_rect(data = dateRanges, mapping = aes(xmin= start , xmax=end,ymin=-Inf,ymax=Inf), alpha=0.1, fill="black")+
   geom_col(aes(timestamp,P))+
   # geom_line(aes(timestamp,LEAF_WET/10), color = "purple")+

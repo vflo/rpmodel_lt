@@ -1072,7 +1072,7 @@ resistance_neutral <- function(ws_mean=ws_mean, canopy_height = canopy_height){
 }
 
 
-calc_ga <- function(ws,canopy_height,Hs,Ta,z,LAI){
+calc_ga <- function(ws,ustar=NA,canopy_height,Hs,Ta,z,LAI){
   # Tan et al.2019 + Chu et al. 2018 (Supporting information)
   u <- ws
   z <- z # measurement height (m)
@@ -1099,6 +1099,7 @@ calc_ga <- function(ws,canopy_height,Hs,Ta,z,LAI){
   lamb <- LAI/2
   lamb_rs <- 1.25
   
+  if(is.na(ustar)){
   alpha_2 <- 1-((1-exp(-sqrt(a1*lamb)))/sqrt(a1*lamb)*(1-0.3991*exp(-0.1779*LAI)))
   if(LAI<0.8775){
     fz <- 0.3299*LAI^1.5+2.1713
@@ -1112,6 +1113,10 @@ calc_ga <- function(ws,canopy_height,Hs,Ta,z,LAI){
       }
   
   ust <- (k*u)/(log((z-Hc*alpha_2)/(Hc*alpha_1))+log(lamb_rs))
+  }else{
+    ust <- ustar
+  }
+  
   
   EPs <- -(k*g*(z-d)*Hs)/(rho*CP*Ta*ust^3) # atmospheric stability index
   GaM <- 1/(u/ust^2) # aerodynamic conductance for momentum (m s-1)

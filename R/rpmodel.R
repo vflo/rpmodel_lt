@@ -7,6 +7,7 @@ rpmodel <- function(
     LAI = NA, 
     ppfd, 
     u = NA,
+    ustar = NA,
     canopy_height=NA, 
     sw_in = NA, 
     patm = NA, 
@@ -75,6 +76,7 @@ rpmodel <- function(
       LAI, 
       ppfd, 
       u,
+      ustar,
       canopy_height, 
       sw_in, 
       patm, 
@@ -110,6 +112,7 @@ rpmodel_lt <- function(
     LAI = NA, 
     ppfd, 
     u = NA, #wind speed in m s^-1
+    ustar = NA,
     canopy_height=NA, 
     sw_in = NA, 
     patm = NA, 
@@ -212,7 +215,7 @@ rpmodel_lt <- function(
       Hs = gs*cpm*(tcleaf_root-tc)
       if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
         # gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height)*patm/mol_gas_const/tk #mol m-2 s-1
-        gb = calc_ga(u,canopy_height,Hs,tc,z,LAI)*patm/mol_gas_const/tk #mol m-2 s-1
+        gb = calc_ga(u,ustar,canopy_height,Hs,tc,z,LAI)*patm/mol_gas_const/tk #mol m-2 s-1
         gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
         gbs = gs * gb/(gs + gb)
       }else{

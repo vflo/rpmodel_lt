@@ -19,6 +19,7 @@
 #'  if \code{ppfd} is provided in units of mol m-2 month-1, then
 #'  respective output variables are returned as per unit months.
 #' @param u (Optional) Wind speed (m s-1, defaults to \code{NA})
+#' @param ustar (Optional) Wind friction velocity (m s-1, defaults to \code{NA})
 #' @param sw_in (optional) needed when upscaling_method is "max_rad". 
 #' Numeric vector that should be provided in W m-2.
 #' @param patm Atmospheric pressure (Pa). When provided, overrides
@@ -97,6 +98,7 @@
 #'  conditions around the point of maximum radiation.
 #' @param hour_reference_T numeric from 0 to 23. Reference time for the upscaling process.
 #' @param gap_method character string of the method used to do gapfilling. Accepted values are "linear" or "continous".
+#' @param acclim_days numeric with the number of days to use for acclimation.
 #'  
 #'
 #' @return A named list of numeric values (including temperature and pressure 
@@ -264,7 +266,7 @@
 #' }
 #'
 rpmodel_subdaily <- function(
-    TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, #wind speed in m s^-1
+    TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
     canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, meanalpha = 1.0, apar_soilm = 0.0, bpar_soilm = 0.73300,
@@ -279,7 +281,7 @@ rpmodel_subdaily <- function(
       fanir = 0.35 #Fraction of NIR absorbed
     ), returnvar = NULL, verbose = FALSE,
     upscaling_method = c("noon","daily","max_rad"), hour_reference_T = 12, gap_method = "linear",
-    xi_acclimated = "on"
+    xi_acclimated = "on", acclim_days = 15
 ){
   
   #---- Fixed parameters--------------------------------------------------------
@@ -320,11 +322,11 @@ rpmodel_subdaily <- function(
   }
   
   # 1.0 Calculate P model without acclimation
-  tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, canopy_height, sw_in, patm, meanalpha) %>% 
+  tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, ustar, canopy_height, sw_in, patm, meanalpha) %>% 
     split(seq(nrow(.))) %>%
     purrr::map_df(function(x){
       res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
-                    x$ppfd, x$u, x$canopy_height,x$sw_in, x$patm, 
+                    x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
                     unique(elv), unique(z), kphio, beta,
                     soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
                     method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
@@ -348,6 +350,7 @@ rpmodel_subdaily <- function(
                  vpd = vpd,
                  co2 = co2,
                  u = u,
+                 ustar = ustar,
                  z = z,
                  LAI = LAI,
                  canopy_height = canopy_height,
@@ -356,11 +359,11 @@ rpmodel_subdaily <- function(
   # 2.1 apply the dailyUpscaling function 
   dataDaily <- dailyUpscaling(df = dfIn, 
                                 nrWindow = 1, 
-                                hour_reference_T = 12, 
+                                hour_reference_T = hour_reference_T, 
                                 upscaling_method = "noon")
   
   # 3.0 apply running mean
-  dataDaily = runningMean(data_x_running_mean_t = dataDaily, daily_window = 15)
+  dataDaily = runningMean(data_x_running_mean_t = dataDaily, daily_window = acclim_days)
   
   
   # 4.0 Calculate P-model on daily upscaling values
@@ -368,7 +371,7 @@ rpmodel_subdaily <- function(
     split(seq(nrow(.))) %>%
     purrr::map_df(function(x){
       res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
-                     x$ppfd, x$u, x$canopy_height,x$sw_in, x$patm, 
+                     x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
                      unique(elv), unique(z), kphio, beta,
                      soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
                      method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
@@ -384,6 +387,7 @@ rpmodel_subdaily <- function(
   DF <- dfIn  %>% 
     cbind(df_Or) %>% 
     left_join(dataDaily %>%
+                dplyr::select(where(~sum(!is.na(.x)) > 0))%>% 
                 dplyr::select(-c("YEAR","MONTH","DAY","HOUR","MINUTE")) %>% 
                 rename_with( ~ paste0(.x, "_opt"), where(is.numeric)),
               by = "TIMESTAMP")
@@ -436,7 +440,7 @@ rpmodel_subdaily <- function(
         Hs = gs*cpm*(tcleaf_root-x$tc)
         if(!is.na(x$u)&!is.na(x$canopy_height)&!is.na(x$tc)&!is.na(x$z)&!is.na(x$LAI)){
           # gb = 1/resistance_neutral(ws_mean=x$u, canopy_height = x$canopy_height) * x$patm/mol_gas_const/tk #mol m-2 s-1
-          gb = calc_ga(ws=x$u, canopy_height = x$canopy_height,Hs,x$tc,x$z,x$LAI) * x$patm/mol_gas_const/tk #mol m-2 s-1
+          gb = calc_ga(ws=x$u, ustar = x$ustar, canopy_height = x$canopy_height,Hs,x$tc,x$z,x$LAI) * x$patm/mol_gas_const/tk #mol m-2 s-1
           gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
           gbs = gs * gb/(gs + gb)
         }else{
