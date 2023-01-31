@@ -1,17 +1,17 @@
 
-
-
-
 rpmodel <- function(
     tc,
     vpd,
     co2,
     fapar,
-    ppfd,
+    LAI = NA, 
+    ppfd, 
     u = NA,
-    canopy_height = NA,
-    patm = NA,
-    elv = NA,
+    canopy_height=NA, 
+    sw_in = NA, 
+    patm = NA, 
+    elv = NA, 
+    z = NA,
     kphio = ifelse(c4, 1.0,
                    ifelse(do_ftemp_kphio,
                           ifelse(do_soilmstress,
@@ -52,23 +52,18 @@ rpmodel <- function(
       ppfd,
       patm = patm,
       elv = elv,
-      kphio = ifelse(c4, 1.0,
-                     ifelse(do_ftemp_kphio,
-                            ifelse(do_soilmstress,
-                                   0.087182,
-                                   0.081785),
-                            0.049977)),
-      beta = ifelse(c4, 146/9, 146),
-      soilm = stopifnot(!do_soilmstress),
-      meanalpha = 1.0,
-      apar_soilm = 0.0,
-      bpar_soilm = 0.73300,
-      c4 = FALSE,
-      method_jmaxlim = "wang17",
-      do_ftemp_kphio = TRUE,
-      do_soilmstress = FALSE,
-      returnvar = NULL,
-      verbose = FALSE)
+      kphio = kphio,
+      beta = beta,
+      soilm = soilm,
+      meanalpha = meanalpha,
+      apar_soilm = apar_soilm,
+      bpar_soilm = bpar_soilm,
+      c4 = c4,
+      method_jmaxlim = method_jmaxlim,
+      do_ftemp_kphio = do_ftemp_kphio,
+      do_soilmstress = do_soilmstress,
+      returnvar = returnvar,
+      verbose = verbose)
     
   }else{
     
@@ -77,34 +72,30 @@ rpmodel <- function(
       vpd,
       co2,
       fapar,
-      ppfd,
-      u, #wind speed in m s^-1
-      canopy_height,
-      patm = patm,
-      elv = elv,
-      kphio = ifelse(c4, 1.0,
-                     ifelse(do_ftemp_kphio,
-                            ifelse(do_soilmstress,
-                                   0.087182,
-                                   0.081785),
-                            0.049977)),
-      beta = ifelse(c4, 146/9, 146),
+      LAI, 
+      ppfd, 
+      u,
+      canopy_height, 
+      sw_in, 
+      patm, 
+      elv, 
+      z,
+      kphio = kphio,
+      beta = beta,
       soilm = stopifnot(!do_soilmstress),
-      meanalpha = 1.0,
-      apar_soilm = 0.0,
-      bpar_soilm = 0.73300,
-      c4 = FALSE,
-      method_jmaxlim = "wang17",
-      do_ftemp_kphio = TRUE,
-      do_soilmstress = FALSE,
-      do_leaftemp = FALSE,
+      meanalpha = meanalpha,
+      apar_soilm = apar_soilm,
+      bpar_soilm = bpar_soilm,
+      c4 = c4,
+      method_jmaxlim = method_jmaxlim,
+      do_ftemp_kphio = do_ftemp_kphio,
+      do_soilmstress = do_soilmstress,
+      do_leaftemp = do_leaftemp,
       energy_params = energy_params,
-      returnvar = NULL,
-      verbose = FALSE)
-    
+      returnvar = returnvar,
+      verbose = verbose)
     
   }
-  
   
 }
 
@@ -116,11 +107,14 @@ rpmodel_lt <- function(
     vpd,
     co2,
     fapar,
-    ppfd,
-    u, #wind speed in m s^-1
-    canopy_height,
-    patm = NA,
-    elv = NA,
+    LAI = NA, 
+    ppfd, 
+    u = NA, #wind speed in m s^-1
+    canopy_height=NA, 
+    sw_in = NA, 
+    patm = NA, 
+    elv = NA, 
+    z = NA,
     kphio = ifelse(c4, 1.0,
                    ifelse(do_ftemp_kphio,
                           ifelse(do_soilmstress,
@@ -181,25 +175,8 @@ rpmodel_lt <- function(
     
     patm <- calc_patm(elv)
   }
-  
-  #initialize recursive 
-  tcleaf = tc
-  tcleaf_new = tcleaf+1
-  
-  # while(abs(tcleaf-tcleaf_new)>1e-3){
-    # tcleaf = tcleaf_new
-    # tkleaf = tcleaf+273.15
-    # vpd_new = (es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) - ea)
-  #   while(vpd_new < 0) {
-  #     tcleaf_new = (tcleaf_new+tc)/2 + runif(1)
-  #     tcleaf = tcleaf_new
-  #     tkleaf = tcleaf+273.15
-  #     vpd_new = (es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) - ea)
-  #     # vpd_new = 0.01
-  #   }
-    # calculate pmodel
 
-    
+# calculate pmodel
     tcleaf_new <- uniroot(function(tcleaf_root){
       tkleaf = tcleaf_root+273.15
       # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
@@ -215,30 +192,27 @@ rpmodel_lt <- function(
         ppfd,
         patm = patm,
         elv = elv,
-        kphio = ifelse(c4, 1.0,
-                       ifelse(do_ftemp_kphio,
-                              ifelse(do_soilmstress,
-                                     0.087182,
-                                     0.081785),
-                              0.049977)),
-        beta = ifelse(c4, 146/9, 146),
-        soilm = stopifnot(!do_soilmstress),
-        meanalpha = 1.0,
-        apar_soilm = 0.0,
-        bpar_soilm = 0.73300,
-        c4 = FALSE,
-        method_jmaxlim = "wang17",
-        do_ftemp_kphio = TRUE,
-        do_soilmstress = FALSE,
-        returnvar = NULL,
-        verbose = FALSE)
+        kphio = kphio,
+        beta = beta,
+        soilm = soilm,
+        meanalpha = meanalpha,
+        apar_soilm = apar_soilm,
+        bpar_soilm = bpar_soilm,
+        c4 = c4,
+        method_jmaxlim = method_jmaxlim,
+        do_ftemp_kphio = do_ftemp_kphio,
+        do_soilmstress = do_soilmstress,
+        returnvar = returnvarL,
+        verbose = verbose)
       #Latent Heat Loss calculation
       if(is.na(df_res$gs)){df_res$gs = 0}
       if(length(df_res$gs) == 0){df_res$gs = 0}
       if(is.infinite(df_res$gs)){df_res$gs = 100} 
       gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
-      if(!is.na(u)&!is.na(canopy_height)){
-        gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height) *patm/mol_gas_const/tk #mol m-2 s-1
+      Hs = gs*cpm*(tcleaf_root-tc)
+      if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
+        # gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height)*patm/mol_gas_const/tk #mol m-2 s-1
+        gb = calc_ga(u,canopy_height,Hs,tc,z,LAI)*patm/mol_gas_const/tk #mol m-2 s-1
         gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
         gbs = gs * gb/(gs + gb)
       }else{
@@ -281,23 +255,18 @@ rpmodel_lt <- function(
       ppfd,
       patm = patm,
       elv = elv,
-      kphio = ifelse(c4, 1.0,
-                     ifelse(do_ftemp_kphio,
-                            ifelse(do_soilmstress,
-                                   0.087182,
-                                   0.081785),
-                            0.049977)),
-      beta = ifelse(c4, 146/9, 146),
-      soilm = stopifnot(!do_soilmstress),
-      meanalpha = 1.0,
-      apar_soilm = 0.0,
-      bpar_soilm = 0.73300,
-      c4 = FALSE,
-      method_jmaxlim = "wang17",
-      do_ftemp_kphio = TRUE,
-      do_soilmstress = FALSE,
-      returnvar = NULL,
-      verbose = FALSE)
+      kphio = kphio,
+      beta = beta,
+      soilm = soilm,
+      meanalpha = meanalpha,
+      apar_soilm = apar_soilm,
+      bpar_soilm = bpar_soilm,
+      c4 = c4,
+      method_jmaxlim = method_jmaxlim,
+      do_ftemp_kphio = do_ftemp_kphio,
+      do_soilmstress = do_soilmstress,
+      returnvar = returnvar,
+      verbose = verbose)
 
   # }
   

@@ -4,6 +4,7 @@
 #' corollary predictions (Prentice et al., 2014; Han et al., 2017).
 #'
 #' @param tc Temperature, relevant for photosynthesis (deg C)
+#' @param tcleaf Temperature of leaf, relevant for photosynthesis (deg C)
 #' @param vpd Vapour pressure deficit (Pa)
 #' @param co2 Atmospheric CO2 concentration (ppm)
 #' @param fapar (Optional) Fraction of absorbed photosynthetically active
@@ -245,7 +246,7 @@
 
 rpmodel_core <- function(
   tc,
-  tcleaf,
+  tcleaf = NA,
   vpd,
   co2,
   fapar,
@@ -289,6 +290,8 @@ rpmodel_core <- function(
     patm <- calc_patm(elv)
   }
 
+  if(is.na(tcleaf)){tcleaf <- tc}
+  
   #---- Fixed parameters--------------------------------------------------------
   c_molmass <- 12.0107  # molecular mass of carbon (g)
   kPo <- 101325.0       # standard atmosphere, Pa (Allen, 1973)
@@ -303,7 +306,7 @@ rpmodel_core <- function(
     do_ftemp_kphio <- do_ftemp_kphio[1]
   }
   if (do_ftemp_kphio) {
-    kphio <- ftemp_kphio( tc, c4 ) * kphio
+    kphio <- ftemp_kphio( tcleaf, c4 ) * kphio
   } else {
     if (c4){
       kphio <- ftemp_kphio( 15.0, c4 ) * kphio
@@ -327,10 +330,10 @@ rpmodel_core <- function(
   ca <- co2_to_ca( co2, patm )
 
   ## photorespiratory compensation point - Gamma-star (Pa)
-  gammastar <- calc_gammastar( tc, patm )
+  gammastar <- calc_gammastar( tcleaf, patm )
 
   ## Michaelis-Menten coef. (Pa)
-  kmm <- calc_kmm( tc, patm )
+  kmm <- calc_kmm( tcleaf, patm )
 
   ## viscosity correction factor = viscosity( temp, press )/viscosity( 25 degC, 1013.25 Pa)
   ns      <- viscosity_h2o( tc, patm )  # Pa sc4, 1.0,
@@ -399,7 +402,7 @@ rpmodel_core <- function(
   vcmax25_unitiabs  <- out_lue_vcmax$vcmax_unitiabs / ftemp25_inst_vcmax
 
   ## Dark respiration at growth temperature
-  ftemp_inst_rd <- ftemp_inst_rd( tc )
+  ftemp_inst_rd <- ftemp_inst_rd( tcleaf )
   rd_unitiabs  <- rd_to_vcmax * (ftemp_inst_rd / ftemp25_inst_vcmax) * out_lue_vcmax$vcmax_unitiabs
 
   #---- Quantities that scale linearly with absorbed light ---------------------

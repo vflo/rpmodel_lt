@@ -70,8 +70,8 @@ data_flx <- data_flx %>%
   na.omit(cols=c(1:13))
   # filter(!is.na(T_CANOPY),!is.na(TA),!is.na(VPD),!is.na(PPFD_IN),!is.na)
 
-res <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$TA, vpd = data_flx$VPD*100,co2 = data_flx$CO2,fapar = 0.9,
-                        ppfd = data_flx$PPFD_IN,u=data_flx$WS,canopy_height = 20, patm =data_flx$PA*1000, elv = 0)
+res <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$TA, vpd = data_flx$VPD*100,co2 = data_flx$CO2,fapar = 0.9,LAI = 1,
+                        ppfd = data_flx$PPFD_IN,u=data_flx$WS,canopy_height = 20, patm =data_flx$PA*1000, elv = 0, z = 40)
 
 df_res <- as_tibble(res) %>% cbind(data_flx)
 
@@ -82,7 +82,7 @@ dateRanges <- data.frame(
   dplyr::distinct()
 
 df_res %>%
-  slice(600:736) %>% 
+  slice(590:746) %>% 
   ggplot() +
   geom_line(aes(timestamp,T_CANOPY), color = "grey40")+
   geom_ribbon(aes(timestamp,ymin=T_CANOPY - T_CANOPYsd, ymax=T_CANOPY + T_CANOPYsd),alpha = 0.2)+

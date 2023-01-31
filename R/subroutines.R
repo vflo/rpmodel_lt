@@ -458,7 +458,7 @@ ftemp_inst_rd <- function( tc ){
 
 ftemp_inst_vcmax <- function(
   tcleaf,
-  tcgrowth = tcleaf,
+  tcgrowth,
   tcref = 25.0
 ){
   
@@ -1074,6 +1074,7 @@ resistance_neutral <- function(ws_mean=ws_mean, canopy_height = canopy_height){
 
 calc_ga <- function(ws,canopy_height,Hs,Ta,z,LAI){
   # Tan et al.2019 + Chu et al. 2018 (Supporting information)
+  u <- ws
   z <- z # measurement height (m)
   Hc <- canopy_height # mean canopy height (m)
   d <- 0.7*Hc # zero-displacement plane (m)
@@ -1110,7 +1111,7 @@ calc_ga <- function(ws,canopy_height,Hs,Ta,z,LAI){
       alpha_1 <- (a2*exp(-b2*lamb^c3)*lamb^d2+z00_h)*fz
       }
   
-  ust <- (k*ws)/(log((z-Hc*alpha_2)/(Hc*alpha_1))+log(lamb_rs))
+  ust <- (k*u)/(log((z-Hc*alpha_2)/(Hc*alpha_1))+log(lamb_rs))
   
   EPs <- -(k*g*(z-d)*Hs)/(rho*CP*Ta*ust^3) # atmospheric stability index
   GaM <- 1/(u/ust^2) # aerodynamic conductance for momentum (m s-1)
@@ -1120,8 +1121,8 @@ calc_ga <- function(ws,canopy_height,Hs,Ta,z,LAI){
     x=(1-16*EPs)^(1/4)
     faiM=2*log(0.5*(1+x))+log(0.5*(1+x^2))-2*atan(x)+1.5708 # diabatic correction factor for momentum
     faiH=2*log(0.5*(1+x^2))   # diabatic correction factor for heat
-    Gb=1/(1/(k*ust(i))*(mh+faiM(i)-faiH(i)))  # add diabatic correction for bounday layer conductance (m s-1)
-    Ga(i)=1/(1/(Gb(i))+1/(GaM(i)))      # aerodynamic conductance for water vapor 
+    Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
+    Ga=1/(1/(Gb)+1/(GaM))      # aerodynamic conductance for water vapor 
   }else{
     faiM=6*log(1+EPs)
     faiH=6*log(1+EPs)

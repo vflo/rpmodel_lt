@@ -1,4 +1,4 @@
-## Original code Giulia Mengoli Victor Flo
+## Original code Giulia Mengoli and Victor Flo
 
 #' Invokes a P-model function call for sub-daily estimations accounting for acclimation
 #'
@@ -11,12 +11,14 @@
 #' @param co2 Atmospheric CO2 concentration (ppm)
 #' @param fapar (Optional) Fraction of absorbed photosynthetically active
 #'  radiation (unitless, defaults to \code{NA})
+#' @param LAI (Optional) Leaf Area Index (m2 leaf m-2 ground, defaults to \code{NA})
 #' @param ppfd Incident photosynthetic photon flux density 
 #'  (mol m-2 d-1, defaults to \code{NA}). Note that the units of 
 #'  \code{ppfd} (per area and per time) determine the units of outputs 
 #'  \code{lue}, \code{gpp}, \code{vcmax}, and \code{rd}. For example, 
 #'  if \code{ppfd} is provided in units of mol m-2 month-1, then
 #'  respective output variables are returned as per unit months.
+#' @param u (Optional) Wind speed (m s-1, defaults to \code{NA})
 #' @param sw_in (optional) needed when upscaling_method is "max_rad". 
 #' Numeric vector that should be provided in W m-2.
 #' @param patm Atmospheric pressure (Pa). When provided, overrides
@@ -28,6 +30,7 @@
 #'  corrected for elevation (argument \code{elv}), using the function
 #' \link{calc_patm}), if argument \code{patm} is not provided. If argument
 #' \code{patm} is provided, \code{elv} is overridden.
+#' @param z (Optional) Wind speed measurement height (m, defaults to \code{NA}).
 #' @param kphio Apparent quantum yield efficiency (unitless). Defaults to
 #'  0.081785 for \code{method_jmaxlim="wang17", do_ftemp_kphio=TRUE, 
 #'  do_soilmstress=FALSE}, 0.087182 for \code{method_jmaxlim="wang17",
@@ -261,11 +264,11 @@
 #' }
 #'
 rpmodel_subdaily <- function(
-    TIMESTAMP, tc, vpd, co2, fapar, ppfd, u=NA, #wind speed in m s^-1
-    canopy_height=NA, sw_in, patm = NA, elv = NA,
+    TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, #wind speed in m s^-1
+    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, meanalpha = 1.0, apar_soilm = 0.0, bpar_soilm = 0.73300,
-    c4 = FALSE, method_optci = "prentice14", method_jmaxlim = "wang17",
+    c4 = FALSE, method_jmaxlim = "wang17",
     do_ftemp_kphio = TRUE, do_soilmstress = FALSE,do_leaftemp = FALSE,
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
@@ -317,19 +320,21 @@ rpmodel_subdaily <- function(
   }
   
   # 1.0 Calculate P model without acclimation
-  tibble(TIMESTAMP,tc, vpd, co2, fapar, ppfd, patm, u, canopy_height, meanalpha) %>% 
+  tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, canopy_height, sw_in, patm, meanalpha) %>% 
     split(seq(nrow(.))) %>%
     purrr::map_df(function(x){
-      res <- rpmodel_lt(x$tc, x$vpd, x$co2, x$fapar,
-                        x$ppfd, x$u, #wind speed in m s^-1
-                        x$canopy_height, x$patm, unique(elv), kphio, beta, c_cost,
-                        soilm, x$meanalpha, apar_soilm, bpar_soilm, c4, method_optci, 
-                        method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
-                        energy_params = energy_params)%>% 
+      res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
+                    x$ppfd, x$u, x$canopy_height,x$sw_in, x$patm, 
+                    unique(elv), unique(z), kphio, beta,
+                    soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
+                    method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
+                    energy_params = energy_params)%>% 
       as_tibble()
     return(res)
     }) -> df_Or
   
+
+
   # 2.0 Create df for upscaling
   dfIn <- tibble(TIMESTAMP = TIMESTAMP,
                  YEAR = lubridate::year(TIMESTAMP),
@@ -343,6 +348,8 @@ rpmodel_subdaily <- function(
                  vpd = vpd,
                  co2 = co2,
                  u = u,
+                 z = z,
+                 LAI = LAI,
                  canopy_height = canopy_height,
                  patm = patm)
   
@@ -360,12 +367,12 @@ rpmodel_subdaily <- function(
   tibble(dataDaily) %>% 
     split(seq(nrow(.))) %>%
     purrr::map_df(function(x){
-      res <- rpmodel_lt(x$tc, x$vpd, x$co2, x$fapar,
-                        x$ppfd, x$u, #wind speed in m s^-1
-                        x$canopy_height, x$patm, unique(elv), kphio, beta, c_cost,
-                        soilm, meanalpha, apar_soilm, bpar_soilm, c4, method_optci, 
-                        method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
-                        energy_params = energy_params)%>% 
+      res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
+                     x$ppfd, x$u, x$canopy_height,x$sw_in, x$patm, 
+                     unique(elv), unique(z), kphio, beta,
+                     soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
+                     method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
+                     energy_params = energy_params)%>% 
         as_tibble()
       return(res)
     }) -> df_Mm
@@ -419,7 +426,7 @@ rpmodel_subdaily <- function(
                                      gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, kmm = x$kmm, 
                                      kmm_opt = x$kmm_opt, kphio = kphio, soilmstress = soilmstress, 
                                      method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                                     xi_acclimated =xi_acclimated)
+                                     xi_acclimated =xi_acclimated,beta = beta, c_cost = c_cost)
         
         #Latent Heat Loss calculation
         if(is.na(df_res$gs)){df_res$gs = 0}
@@ -427,9 +434,9 @@ rpmodel_subdaily <- function(
         if(is.infinite(df_res$gs)){df_res$gs = 100} 
         gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
         Hs = gs*cpm*(tcleaf_root-x$tc)
-        if(!is.na(x$u)&!is.na(x$canopy_height)&!is.na(x$Tc)&!is.na(x$z)&!is.na(x$LAI)){
+        if(!is.na(x$u)&!is.na(x$canopy_height)&!is.na(x$tc)&!is.na(x$z)&!is.na(x$LAI)){
           # gb = 1/resistance_neutral(ws_mean=x$u, canopy_height = x$canopy_height) * x$patm/mol_gas_const/tk #mol m-2 s-1
-          gb = calc_ga(ws_mean=x$u, canopy_height = x$canopy_height,Hs,x$Tc,x$z,x$LAI) * x$patm/mol_gas_const/tk #mol m-2 s-1
+          gb = calc_ga(ws=x$u, canopy_height = x$canopy_height,Hs,x$tc,x$z,x$LAI) * x$patm/mol_gas_const/tk #mol m-2 s-1
           gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
           gbs = gs * gb/(gs + gb)
         }else{
@@ -462,6 +469,8 @@ rpmodel_subdaily <- function(
   }) %>% bind_rows() %>% as.numeric()
   tcleaf = tcleaf_new
   tkleaf = tcleaf+273.15
+  es = exp(34.494-4924.99/(tc+237.1))/((tc+105)^1.57)
+  ea = es - vpd
   ei = exp(34.494-4924.99/(tcleaf_new+237.1))/((tcleaf_new+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
   vpd_new = (ei - ea)
   vpd_new = ifelse(vpd_new<0,0,vpd_new)
@@ -471,7 +480,7 @@ rpmodel_subdaily <- function(
                             xiPa = DF$xiPa, chi_inst = DF$chi_inst, ns_star_opt = DF$ns_star_opt, 
                             gammastar = DF$gammastar, gammastar_opt = DF$gammastar_opt, kmm = DF$kmm, kmm_opt = DF$kmm_opt,
                             kphio = kphio, soilmstress = soilmstress, method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax,
-                            xi_acclimated =xi_acclimated)
+                            xi_acclimated =xi_acclimated, beta = beta, c_cost = c_cost)
   
   return(out)
 
@@ -729,7 +738,7 @@ runningMean <- function(data_x_running_mean_t = df, daily_window = 10) {
 
 rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xiPa, chi_inst, ns_star_opt,
                                gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim, c4,
-                               rd_to_vcmax, xi_acclimated){
+                               rd_to_vcmax, xi_acclimated, beta, c_cost){
   #---- Fixed parameters--------------------------------------------------------
   c_molmass <- 12.0107  # molecular mass of carbon (g)
   #'
@@ -746,7 +755,7 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     DF[,'xiPa'] = NA
   } else {
     
-    cat(sprintf('vcmax_opt and jmax_opt calculated\n'))
+    # cat(sprintf('vcmax_opt and jmax_opt calculated\n'))
     
     # Intrinsic quantum efficiency of photosynthesis (phi0)
     phi0 = (1/8) *(0.352 + 0.022*tcleaf_opt - 0.00034*tcleaf_opt^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
@@ -931,7 +940,8 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     vcmax           = vcmaxAdjusted,
     jmax            = jmaxAdjusted,
     rd              = rd,
-    tcleaf          = tcleaf
+    tcleaf          = tcleaf,
+    vpd_leaf        = vpd
   )
   
   return(out)
