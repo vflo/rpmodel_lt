@@ -74,7 +74,7 @@ rpmodel <- function(
       co2,
       fapar,
       LAI, 
-      ppfd, 
+      ppfd,
       u,
       ustar,
       canopy_height, 
@@ -138,7 +138,6 @@ rpmodel_lt <- function(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
       cpm = 75.38, #J mol^-1 ºC-1
-      kalb_vis = 0.3, # visible albedo
       kfFEC = 2.0, #Photon flux to energy μmol J-1 (Meek et al., 1984)
       fanir = 0.35 #Fraction of NIR absorbed
     ),
@@ -149,7 +148,6 @@ rpmodel_lt <- function(
   epsleaf = energy_params["epsleaf"] %>% as.numeric
   sigma = energy_params["ste_bolz"]%>% as.numeric
   cpm = energy_params["cpm"]%>% as.numeric #molar heat capacity of water 
-  kalb_vis = energy_params["kalb_vis"]%>% as.numeric
   kfFEC = energy_params["kfFEC"]%>% as.numeric
   fanir = energy_params["fanir"]%>% as.numeric
   tk = tc+273.15
@@ -214,8 +212,7 @@ rpmodel_lt <- function(
       gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
       Hs = gs*cpm*(tcleaf_root-tc)
       if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
-        # gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height)*patm/mol_gas_const/tk #mol m-2 s-1
-        gb = calc_ga(u,ustar,canopy_height,Hs,tc,z,LAI)*patm/mol_gas_const/tk #mol m-2 s-1
+        gb = calc_ga(u,ustar,canopy_height,tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk)*patm/mol_gas_const/tk #mol m-2 s-1
         gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
         gbs = gs * gb/(gs + gb)
       }else{
@@ -226,17 +223,18 @@ rpmodel_lt <- function(
       lE = lat_heat*mol_mas_wv*E
       
       #Shortwave Energy Input
-      Rs_PAR_Wm2 = ppfd/(kfFEC*(1-kalb_vis))
-      Rs_NIR_Wm2 = Rs_PAR_Wm2 #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
-      Qsw = fapar*Rs_PAR_Wm2 + fanir*Rs_NIR_Wm2
+      Rs_PAR_Wm2 = fapar*ppfd/kfFEC
+      Rs_NIR_Wm2 = fanir*ppfd/kfFEC #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
+      Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
       
       #Thermal Infrared Input
       epssky = 1.72 * ((ea*1e-3)/tk)^0.143
-      Qtir = epsleaf*epssky*sigma*(tk^4 + tk^4) #sky and air
+      Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
       
       #Thermal Infra-Red Losses
-      # Qtirleaf = epsleaf*sigma*tkleaf^4
-      Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+      Qtirleaf = epsleaf*sigma*tkleaf^4
+      # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+      # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
       
       #Convective Heat Exchange
       Qc = gbh*cpm*(tcleaf_root-tc)
@@ -249,6 +247,7 @@ rpmodel_lt <- function(
     tkleaf = tcleaf+273.15
     ei = exp(34.494-4924.99/(tcleaf_new+237.1))/((tcleaf_new+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
     vpd_new = (ei - ea)
+    vpd_new = ifelse(vpd_new<0,0,vpd_new)
     df_res <- rpmodel_core(
       tc,
       tcleaf_new,

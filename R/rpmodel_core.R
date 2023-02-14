@@ -466,6 +466,7 @@ rpmodel_core <- function(
   ## construct list for output
   out <- list(
               gpp             = gpp,   # remove this again later
+              assim           = assim,
               ca              = ca,
               gammastar       = gammastar,
               kmm             = kmm,

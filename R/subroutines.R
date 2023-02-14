@@ -1072,18 +1072,21 @@ resistance_neutral <- function(ws_mean=ws_mean, canopy_height = canopy_height){
 }
 
 
-calc_ga <- function(ws,ustar=NA,canopy_height,Hs,Ta,z,LAI){
+calc_ga <- function(ws,ustar=NA,canopy_height, tcleaf_root,Ta,z,LAI,patm,mol_gas_const,tk){
   # Tan et al.2019 + Chu et al. 2018 (Supporting information)
   u <- ws
+  if(u <=0){u <- 1e-2} #avoid infinite atmospheric stability index
   z <- z # measurement height (m)
   Hc <- canopy_height # mean canopy height (m)
   d <- 0.7*Hc # zero-displacement plane (m)
   k <- 0.41 # karman's constant
   g <- 9.8 # gravity constant (m s-2)
   CP <- 1005 # specific heat capacity of air at constant pressure (J kg-1 K-1)
+  cpm <- 75.38 #J mol-1 K-1
   rho <- 1.234 # air density (kg m-3)
-  mh <- 2 # ln(zm/z0)Stanton number (dimensionless)
-  Hs <- Hs #sensible head flux (w m-2)
+  mh <- 2 # ln(zm/z0)Stanton number (dimensionless) (see : DETERMINATION OF ROUGHNESS LENGTHS FOR HEAT AND MOMENTUM OVER BOREAL FORESTS!!!!)
+  Hs <- 0 #sensible head flux (w m-2)
+  Hs_wrong <- TRUE
   # Parameters: Raupach, 1994; Schaudt & Dickinson, 2000 SD00 model
   a1 <- 15
   a2 <- 5.86
@@ -1099,6 +1102,7 @@ calc_ga <- function(ws,ustar=NA,canopy_height,Hs,Ta,z,LAI){
   lamb <- LAI/2
   lamb_rs <- 1.25
   
+
   if(is.na(ustar)){
   alpha_2 <- 1-((1-exp(-sqrt(a1*lamb)))/sqrt(a1*lamb)*(1-0.3991*exp(-0.1779*LAI)))
   if(LAI<0.8775){
@@ -1118,7 +1122,9 @@ calc_ga <- function(ws,ustar=NA,canopy_height,Hs,Ta,z,LAI){
   }
   
   
-  EPs <- -(k*g*(z-d)*Hs)/(rho*CP*Ta*ust^3) # atmospheric stability index
+  
+  while(Hs_wrong){
+  EPs <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
   GaM <- 1/(u/ust^2) # aerodynamic conductance for momentum (m s-1)
   GbN <- 1/(1/(k*ust)*mh) # boundary layer conductance under neutral condition (m s-1)
   GbN2 <- 1/(1.35*ust^(-2/3)) # boundary layer conductance according to Thom 1972
@@ -1134,5 +1140,12 @@ calc_ga <- function(ws,ustar=NA,canopy_height,Hs,Ta,z,LAI){
     Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
     Ga=1/(1/(Gb)+1/(GaM))
   }
+  Hs_new = Ga*0.92*cpm*(tcleaf_root-Ta)*patm/mol_gas_const/tk
+    if((Hs_new-Hs)^2>1e-6){
+      Hs <- (Hs + Hs_new)/2
+    }else{Hs_wrong <- FALSE}
+  }
+  
   return(Ga)
 }
+
