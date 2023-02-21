@@ -7,7 +7,7 @@ kalb_vis <- 0.03    # visible light albedo (Sellers, 1985)
 kfFEC <- 2.04       # from-flux-to-energy, umol/J (Meek et al., 1984)
 #### read the files' paths ####
 filenames.fluxnet<- list.files(path="R/data/original_sites", "*.csv$", full.names=TRUE,recursive = TRUE)
-filename <- filenames.fluxnet[2]
+filename <- filenames.fluxnet[15]
 fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",",na.strings = "-9999",integer64="character")
 ind <- strptime(fluxnet_data$TIMESTAMP_START, format = "%Y%m%d%H%M",
                 tz = "GMT") %>% as.POSIXct()
@@ -18,13 +18,13 @@ site
 df <- tibble(timestamp=ind) %>% cbind(as_tibble(fluxnet_data)) #%>% cbind(si_code = site)
 plot(df$timestamp,df$NETRAD)
 #### read metadata ####
-sites_metadata <-  read_delim("R/data/sites_metadata.csv", 
+sites_metadata <- read_delim("R/data/sites_metadata.csv", 
                               delim = "\t", escape_double = FALSE, 
                               trim_ws = TRUE)
 #3,4,5,7,51,65
 #### Estimate partition ####
-purrr::map2(.x=as.list(filenames.fluxnet)[1],
-            .y=sites_metadata[1,]%>%
+purrr::map2(.x=as.list(filenames.fluxnet)[15],
+            .y=sites_metadata[15,]%>%
               split(seq(nrow(.))),
             .f=function(x = .x, y=.y){
               site <- do.call(rbind, strsplit(basename(x), "_"))[,2]
@@ -42,79 +42,138 @@ purrr::map2(.x=as.list(filenames.fluxnet)[1],
 #### Obtain final database ####
 filenames_fluxnet <- list.files(path="R/data/sites", "*.csv$", full.names=TRUE,recursive = TRUE)
 filenames_fluxnet_name <- list.files(path="R/data/sites", "*.csv$", full.names=FALSE,recursive = TRUE)
-# index <- 20
-purrr::map(as.list(c(21:70)),function(index){
-filename <- filenames_fluxnet[index]
-filename_name <- filenames_fluxnet_name[index]
-fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",")
-ind <- strptime(fluxnet_data$TIMESTAMP_START, format = "%Y%m%d%H%M",
-                tz = "GMT") %>% as.POSIXct()
-time.freq <- abs(as.numeric(ind[1] - ind[2], units = "hours"))
-t_conv_f <- 3600 * time.freq
-site <- do.call(rbind, strsplit(basename(filename), "_"))[,4]
-site
-df <- tibble(DateTime=ind) %>% cbind(as_tibble(fluxnet_data)) #%>% cbind(si_code = site)
-names(df)
-
-df <- df %>% dplyr::select(-starts_with("WS_MAX"),
-                           -starts_with("CO2_M"),
-                           -starts_with("H2O"),
-                           -starts_with("H_S")) %>% 
-  mutate(DateTime = DateTime,
-         TIMESTAMP_START = TIMESTAMP_START,
-         TIMESTAMP_END = TIMESTAMP_END,
-         Tair = TA,
-         Ustar = USTAR,
-         rH = RH,
-         NEE = NEE_f,
-         GPP = GPP,#
-         RECO = RECO,
-         H = rowMeans(select(df,starts_with("H")),na.rm=TRUE),
-         SW_IN = SW_IN,
-         VPD = VPD_PI,
-         PPFD = SW_IN * (kfFEC*(1 - kalb_vis)),#bigleaf::Rg.to.PPFD(SW_IN, J_to_mol = 4.6, frac_PAR = 0.5),#rowMeans(select(df,starts_with("PPFD_IN")),na.rm=TRUE),
-         WS = rowMeans(select(df,starts_with("WS")),na.rm=TRUE),
-         NETRAD = NETRAD,
-         CO2 = case_when(length(grep("^CO2_PI$", names(df), value = TRUE))>0~
-                           rowMeans(select(df,starts_with("CO2_PI")),na.rm=TRUE),
-                         TRUE~rowMeans(select(df,-starts_with("CO2_PI")) %>% 
-                                         select(starts_with("CO2")),na.rm=TRUE)),
-         PA = case_when(length(grep("^PA_PI$", names(df), value = TRUE))>0~
-                          rowMeans(select(df,starts_with("PA_PI")),na.rm=TRUE),
-                        TRUE~rowMeans(select(df,-starts_with("PA_PI")) %>% 
-                                        select(starts_with("PA")),na.rm=TRUE)),
-         LE = case_when(length(grep("^LE_PI$", names(df), value = TRUE))>0~
-                          rowMeans(select(df,starts_with("LE_PI")),na.rm=TRUE),
-                        TRUE~rowMeans(select(df,-starts_with("LE_PI")) %>% 
-                                        select(starts_with("LE")),na.rm=TRUE)),
-         P = case_when(length(grep("^P_PI$", names(df), value = TRUE))>0~
-                         rowMeans(select(df,starts_with("P_PI")),na.rm=TRUE),
-                       TRUE~rowMeans(select(df,-starts_with(c("PP","P_PI","PA"))) %>% 
-                                       select(starts_with("P")),na.rm=TRUE)),
-         SWC = case_when(length(grep("^SWC_PI$", names(df), value = TRUE))>0~
-                           rowMeans(select(df,starts_with("SWC_PI")),na.rm=TRUE),
-                         TRUE~rowMeans(select(df,-starts_with("SWC_PI")) %>% 
-                                         select(starts_with("SWC")),na.rm=TRUE)),
-         Tcan =  rowMeans(select(df,starts_with("T_CANOPY")),na.rm=TRUE)) %>%
-           dplyr::select(DateTime,TIMESTAMP_START, TIMESTAMP_END, Tair, Ustar, rH,NEE, GPP,RECO,H,
-                         SW_IN, VPD, PPFD, WS, NETRAD, CO2, PA, LE, P, SWC, Tcan)
-
-summary(df)
-
-write.csv(df,paste0("R/data/final_sites/",filename_name), row.names=FALSE)
+# index <- 11
+purrr::map(as.list(c(27)),function(index){
+  filename <- filenames_fluxnet[index]
+  filename_name <- filenames_fluxnet_name[index]
+  fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",")
+  ind <- strptime(fluxnet_data$TIMESTAMP_START, format = "%Y%m%d%H%M",
+                  tz = "GMT") %>% as.POSIXct()
+  time.freq <- abs(as.numeric(ind[1] - ind[2], units = "hours"))
+  t_conv_f <- 3600 * time.freq
+  site <- do.call(rbind, strsplit(basename(filename), "_"))[,4]
+  site
+  df <- tibble(DateTime=ind) %>% cbind(as_tibble(fluxnet_data)) #%>% cbind(si_code = site)
+  names(df)
+  
+  df <- df %>% dplyr::select(-starts_with("WS_MAX"),
+                             -starts_with("CO2_M"),
+                             -starts_with("H2O"),
+                             -starts_with("H_S")) %>% 
+    mutate(DateTime = DateTime,
+           TIMESTAMP_START = TIMESTAMP_START,
+           TIMESTAMP_END = TIMESTAMP_END,
+           Tair = TA,
+           Ustar = USTAR,
+           rH = RH,
+           NEE = NEE_f,
+           GPP = GPP,#
+           RECO = RECO,
+           H = rowMeans(select(df,starts_with("H")),na.rm=TRUE),
+           SW_IN = SW_IN,
+           VPD = VPD_PI,
+           PPFD = SW_IN * (kfFEC*(1 - kalb_vis)),#bigleaf::Rg.to.PPFD(SW_IN, J_to_mol = 4.6, frac_PAR = 0.5),#rowMeans(select(df,starts_with("PPFD_IN")),na.rm=TRUE),
+           WS = rowMeans(select(df,starts_with("WS")),na.rm=TRUE),
+           NETRAD = NETRAD,
+           CO2 = case_when(length(grep("^CO2_PI$", names(df), value = TRUE))>0~
+                             rowMeans(select(df,starts_with("CO2_PI")),na.rm=TRUE),
+                           TRUE~rowMeans(select(df,-starts_with("CO2_PI")) %>% 
+                                           select(starts_with("CO2")),na.rm=TRUE)),
+           PA = case_when(length(grep("^PA_PI$", names(df), value = TRUE))>0~
+                            rowMeans(select(df,starts_with("PA_PI")),na.rm=TRUE),
+                          TRUE~rowMeans(select(df,-starts_with("PA_PI")) %>% 
+                                          select(starts_with("PA")),na.rm=TRUE)),
+           LE = case_when(length(grep("^LE_PI$", names(df), value = TRUE))>0~
+                            rowMeans(select(df,starts_with("LE_PI")),na.rm=TRUE),
+                          TRUE~rowMeans(select(df,-starts_with("LE_PI")) %>% 
+                                          select(starts_with("LE")),na.rm=TRUE)),
+           P = case_when(length(grep("^P_PI$", names(df), value = TRUE))>0~
+                           rowMeans(select(df,starts_with("P_PI")),na.rm=TRUE),
+                         TRUE~rowMeans(select(df,-starts_with(c("PP","P_PI","PA"))) %>% 
+                                         select(starts_with("P")),na.rm=TRUE)),
+           SWC = case_when(length(grep("^SWC_PI$", names(df), value = TRUE))>0~
+                             rowMeans(select(df,starts_with("SWC_PI")),na.rm=TRUE),
+                           TRUE~rowMeans(select(df,-starts_with("SWC_PI")) %>% 
+                                           select(starts_with("SWC")),na.rm=TRUE)),
+           Tcan =  rowMeans(select(df,starts_with("T_CANOPY")),na.rm=TRUE)) %>%
+             dplyr::select(DateTime,TIMESTAMP_START, TIMESTAMP_END, Tair, Ustar, rH,NEE, GPP,RECO,H,
+                           SW_IN, VPD, PPFD, WS, NETRAD, CO2, PA, LE, P, SWC, Tcan)
+  
+  summary(df)
+  
+  write.csv(df,paste0("R/data/final_sites/",filename_name), row.names=FALSE)
 
 })
 
 
 
 
+#### Include canopy temperatures to HA1, Me2, NR1, Wrc ####
 
 
+filenames_fluxnet <- list.files(path="R/data/final_sites", "*.csv$", full.names=TRUE,recursive = TRUE)
+filenames_fluxnet
 
+#Ha1
+index <- 8
+filename <- filenames_fluxnet[index]
+fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
+load(file="R/data/HF.RData")
+names(HF)
+foo <- HF %>% 
+  mutate(Tcan = rowMeans(dplyr::select(.,ACRU_mean, BEPA_mean, PIST_mean, QURU_mean), na.rm = TRUE),
+         DateTime = (date - lubridate::hours(8)-minutes(30) ) %>% force_tz(tzone = "UTC")
+         ) %>% 
+  dplyr::select(DateTime,Tcan,ACRU_mean, BEPA_mean, PIST_mean, QURU_mean)
+fluxnet_data <- fluxnet_data %>% 
+  dplyr::select(-Tcan) %>% 
+  left_join(foo )
+write.csv(fluxnet_data, filename, row.names=FALSE)
 
+#Me2
+index <- 10
+filename <- filenames_fluxnet[index]
+fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
+load(file="R/data/MR.RData")
+names(MR)
+foo <- MR %>% 
+  mutate(Tcan = Tcan_Avg_corr,
+         DateTime = (date - lubridate::minutes(15)) %>% force_tz(tzone = "UTC")) %>% 
+  dplyr::select(DateTime,Tcan)
+fluxnet_data <- fluxnet_data %>% 
+  dplyr::select(-Tcan) %>% 
+  left_join(foo)
+write.csv(fluxnet_data, filename, row.names=FALSE)
 
+#NR1
+index <- 11
+filename <- filenames_fluxnet[index]
+fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
+load(file="R/data/NW.Rdata")
+names(NW)
+foo <- NW %>% 
+  mutate(Tcan = Tcan,
+         DateTime = (lubridate::ymd_hms(date)+ lubridate::hours(9) - lubridate::minutes(15)) %>% force_tz(tzone = "UTC")) %>% 
+  dplyr::select(DateTime,Tcan)
+fluxnet_data <- fluxnet_data %>% 
+  dplyr::select(-Tcan) %>% 
+  left_join(foo)
+write.csv(fluxnet_data, filename, row.names=FALSE)
 
-
+#WRC
+index <- 27
+filename <- filenames_fluxnet[index]
+fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
+load(file="R/data/WR.RData")
+names(WR)
+foo <- WR %>% 
+  mutate(Tcan = Tcan_Avg_corr,
+         DateTime = (lubridate::ymd_hms(date)- lubridate::hours(8)) %>% force_tz(tzone = "UTC")) %>% 
+  dplyr::select(DateTime,Tcan)
+fluxnet_data <- fluxnet_data %>% 
+  dplyr::select(-Tcan) %>% 
+  left_join(foo)
+write.csv(fluxnet_data, filename, row.names=FALSE)
 
 
 # filenames.fluxnet

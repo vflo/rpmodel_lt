@@ -27,6 +27,17 @@ part_nee<-function(filename,lat,lon,outpath=getwd(),start_q = NA, end_q = NA, dt
 		fluxnet_data$NEE_f<-fluxnet_data[,..namec]
 	}
 	##### correct the names
+	#some stattions report ony PPFD and not SW_IN
+	if((length(grep("SW_IN", names(fluxnet_data), value = TRUE))==0 & length(grep("PPFD_IN", names(fluxnet_data), value = TRUE))>=1)){
+	  nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)[1]
+	  fluxnet_data$SW_IN<-fluxnet_data[,..nameppfd]/(kfFEC*(1 - kalb_vis))
+	  fluxnet_data$SW_IN[fluxnet_data$SW_IN<0]<-0
+	}else if(length(grep("SW_IN", names(fluxnet_data), value = TRUE))>=1 & sum(is.na(fluxnet_data$SW_IN))==length(fluxnet_data$SW_IN)&length(grep("PPFD_IN", names(fluxnet_data), value = TRUE))>=1){
+	  nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)[1]
+	  fluxnet_data$SW_IN<-fluxnet_data[,..nameppfd]/(kfFEC*(1 - kalb_vis))
+	  fluxnet_data$SW_IN[fluxnet_data$SW_IN<0]<-0
+	}
+	
 	##sw_in
 	if(length(grep("^SW_IN$", names(fluxnet_data), value = TRUE))==0){
 		namesw<-grep("^SW_IN", names(fluxnet_data), value = TRUE)[1]
@@ -48,20 +59,11 @@ part_nee<-function(filename,lat,lon,outpath=getwd(),start_q = NA, end_q = NA, dt
 	# 	fluxnet_data$VPD_PI<-fluxnet_data[,..namenevpd]
 	# 	
 	# }
-	#some stattions report ony PPFD and not SW_IN
-	if((length(grep("SW_IN", names(fluxnet_data), value = TRUE))==0 & length(grep("PPFD_IN", names(fluxnet_data), value = TRUE))>=1)){
-		nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)[1]
-		fluxnet_data$SW_IN<-fluxnet_data[,..nameppfd]/(kfFEC*(1 - kalb_vis))
-		fluxnet_data$SW_IN[fluxnet_data$SW_IN<0]<-0
-	}else if(length(grep("SW_IN", names(fluxnet_data), value = TRUE))>=1 & sum(is.na(fluxnet_data$SW_IN))==length(fluxnet_data$SW_IN)&length(grep("PPFD_IN", names(fluxnet_data), value = TRUE))>=1){
-		nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)[1]
-		fluxnet_data$SW_IN<-fluxnet_data[,..nameppfd]/(kfFEC*(1 - kalb_vis))
-		fluxnet_data$SW_IN[fluxnet_data$SW_IN<0]<-0
-	}
+
 	
 	
 	##netrad
-	if(length(grep("^NETRAD$", names(fluxnet_data), value = TRUE))>0){
+	if(length(grep("^NETRAD$", names(fluxnet_data), value = TRUE))==0){
 	  namenetr<-grep("^NETRAD", names(fluxnet_data), value = TRUE)[1]
 	  fluxnet_data$NETRAD<-fluxnet_data[,..namenetr]
 	  if(all(is.na(fluxnet_data$NETRAD))&!all(is.na(fluxnet_data$SW_IN),is.na(fluxnet_data$SW_OUT),
@@ -74,9 +76,13 @@ part_nee<-function(filename,lat,lon,outpath=getwd(),start_q = NA, end_q = NA, dt
 	if(length(grep("^TA$", names(fluxnet_data), value = TRUE))==0){
 		nameta<-grep("^TA_", names(fluxnet_data), value = TRUE)
 		fluxnet_data$TA<-rowMeans(fluxnet_data[,..nameta],na.rm=T)
-		
-		
 	}
+	
+	if(length(grep("^TA_PI", names(fluxnet_data), value = TRUE))>0){
+	  nameta<-grep("^TA_PI", names(fluxnet_data), value = TRUE)
+	  fluxnet_data$TA<-rowMeans(fluxnet_data[,..nameta],na.rm=T)
+	}
+	
 	####get RH average
 	if(length(grep("^RH$", names(fluxnet_data), value = TRUE))==0){
 		namerh<-grep("^RH_", names(fluxnet_data), value = TRUE)
