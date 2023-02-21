@@ -223,8 +223,8 @@ rpmodel_lt <- function(
       lE = lat_heat*mol_mas_wv*E
       
       #Shortwave Energy Input
-      Rs_PAR_Wm2 = fapar*ppfd/kfFEC
-      Rs_NIR_Wm2 = fanir*ppfd/kfFEC #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
+      Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
+      Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
       Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
       
       #Thermal Infrared Input

@@ -276,7 +276,8 @@ rpmodel_subdaily <- function(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
       cpm = 75.38, #J mol^-1 ºC-1
-      kfFEC = 2.0, #Photon flux to energy μmol J-1 (Meek et al., 1984)
+      J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
+      frac_PAR = 0.5, #Fraction of incoming solar irradiance that is photosynthetically active radiation (PAR
       fanir = 0.35 #Fraction of NIR absorbed
     ), returnvar = NULL, verbose = FALSE,
     upscaling_method = c("noon","daily","max_rad"), hour_reference_T = 12, gap_method = "linear",
@@ -467,8 +468,8 @@ rpmodel_subdaily <- function(
           lE = lat_heat*mol_mas_wv*E
           
           #Shortwave Energy Input
-          Rs_PAR_Wm2 = x$fapar*x$ppfd/kfFEC
-          Rs_NIR_Wm2 = fanir*x$ppfd/kfFEC #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
+          Rs_PAR_Wm2 = x$fapar*x$ppfd/(J_to_mol*frac_PAR)
+          Rs_NIR_Wm2 = fanir*x$ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
           Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
           
           #Thermal Infrared Input
