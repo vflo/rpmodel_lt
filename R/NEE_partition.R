@@ -7,7 +7,7 @@ kalb_vis <- 0.03    # visible light albedo (Sellers, 1985)
 kfFEC <- 2.04       # from-flux-to-energy, umol/J (Meek et al., 1984)
 #### read the files' paths ####
 filenames.fluxnet<- list.files(path="R/data/original_sites", "*.csv$", full.names=TRUE,recursive = TRUE)
-filename <- filenames.fluxnet[15]
+filename <- filenames.fluxnet[12]
 fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",",na.strings = "-9999",integer64="character")
 ind <- strptime(fluxnet_data$TIMESTAMP_START, format = "%Y%m%d%H%M",
                 tz = "GMT") %>% as.POSIXct()
@@ -16,20 +16,20 @@ t_conv_f <- 3600 * time.freq
 site <- do.call(rbind, strsplit(basename(filename), "_"))[,2]
 site
 df <- tibble(timestamp=ind) %>% cbind(as_tibble(fluxnet_data)) #%>% cbind(si_code = site)
-plot(df$timestamp,df$NETRAD)
+plot(df$timestamp,df$PPFD_IN_PI_F_1_1_1)
 #### read metadata ####
 sites_metadata <- read_delim("R/data/sites_metadata.csv", 
                               delim = "\t", escape_double = FALSE, 
                               trim_ws = TRUE)
 #3,4,5,7,51,65
 #### Estimate partition ####
-purrr::map2(.x=as.list(filenames.fluxnet)[15],
-            .y=sites_metadata[15,]%>%
+purrr::map2(.x=as.list(filenames.fluxnet)[12],
+            .y=sites_metadata[12,]%>%
               split(seq(nrow(.))),
             .f=function(x = .x, y=.y){
               site <- do.call(rbind, strsplit(basename(x), "_"))[,2]
               if(site != y$site){stop()}
-              part_nee(x,y$lat, y$long,"R/data/sites",start_q =NA,end_q = NA,dts=48)
+              part_nee(x,y$lat, y$long,"R/data/sites",start_q =NA,end_q = NA,dts=24)
               }
             )
 
@@ -43,7 +43,7 @@ purrr::map2(.x=as.list(filenames.fluxnet)[15],
 filenames_fluxnet <- list.files(path="R/data/sites", "*.csv$", full.names=TRUE,recursive = TRUE)
 filenames_fluxnet_name <- list.files(path="R/data/sites", "*.csv$", full.names=FALSE,recursive = TRUE)
 # index <- 11
-purrr::map(as.list(c(27)),function(index){
+purrr::map(as.list(c(8)),function(index){
   filename <- filenames_fluxnet[index]
   filename_name <- filenames_fluxnet_name[index]
   fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",")
@@ -109,8 +109,6 @@ purrr::map(as.list(c(27)),function(index){
 
 
 #### Include canopy temperatures to HA1, Me2, NR1, Wrc ####
-
-
 filenames_fluxnet <- list.files(path="R/data/final_sites", "*.csv$", full.names=TRUE,recursive = TRUE)
 filenames_fluxnet
 

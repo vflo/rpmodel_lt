@@ -27,13 +27,20 @@ part_nee<-function(filename,lat,lon,outpath=getwd(),start_q = NA, end_q = NA, dt
 		fluxnet_data$NEE_f<-fluxnet_data[,..namec]
 	}
 	##### correct the names
+	if(length(grep("^PPFD_IN_PI", names(fluxnet_data), value = TRUE))>0){
+	  nameppfd<-grep("^PPFD_IN_PI", names(fluxnet_data), value = TRUE)[1]
+	  fluxnet_data$PPFD_IN<-rowMeans(fluxnet_data[,..nameppfd],na.rm=T)
+	}
+	
 	#some stattions report ony PPFD and not SW_IN
 	if((length(grep("SW_IN", names(fluxnet_data), value = TRUE))==0 & length(grep("PPFD_IN", names(fluxnet_data), value = TRUE))>=1)){
-	  nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)[1]
+	  nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)
+	  if(any(nameppfd == "PPFD_IN")){nameppfd <- "PPFD_IN"}else{nameppfd<-nameppfd[1]}
 	  fluxnet_data$SW_IN<-fluxnet_data[,..nameppfd]/(kfFEC*(1 - kalb_vis))
 	  fluxnet_data$SW_IN[fluxnet_data$SW_IN<0]<-0
 	}else if(length(grep("SW_IN", names(fluxnet_data), value = TRUE))>=1 & sum(is.na(fluxnet_data$SW_IN))==length(fluxnet_data$SW_IN)&length(grep("PPFD_IN", names(fluxnet_data), value = TRUE))>=1){
-	  nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)[1]
+	  nameppfd<-grep("PPFD_IN", names(fluxnet_data), value = TRUE)
+	  if(any(nameppfd == "PPFD_IN")){nameppfd <- "PPFD_IN"}else{nameppfd<-nameppfd[1]}
 	  fluxnet_data$SW_IN<-fluxnet_data[,..nameppfd]/(kfFEC*(1 - kalb_vis))
 	  fluxnet_data$SW_IN[fluxnet_data$SW_IN<0]<-0
 	}

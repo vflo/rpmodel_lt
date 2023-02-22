@@ -295,8 +295,10 @@ rpmodel_subdaily <- function(
   epsleaf = energy_params["epsleaf"] %>% as.numeric
   sigma = energy_params["ste_bolz"]%>% as.numeric
   cpm = energy_params["cpm"]%>% as.numeric #molar heat capacity of water 
-  kfFEC = energy_params["kfFEC"]%>% as.numeric
+  # kfFEC = energy_params["kfFEC"]%>% as.numeric
   fanir = energy_params["fanir"]%>% as.numeric
+  J_to_mol = energy_params["J_to_mol"]%>% as.numeric
+  frac_PAR = energy_params["frac_PAR"]%>% as.numeric
   lat_heat = 2230 #J g^-1
   mol_gas_const = 8.3144621 #J mol^-1 K^-1
   mol_mas_wv = 18.01528 #g mol-1
@@ -371,13 +373,13 @@ rpmodel_subdaily <- function(
     if(!weighted_accl){
     dataDaily = lapply(dataDaily[,-c(1:6)],function(x)runner::mean_run(x= x,k=acclim_days)) %>% as.data.frame() %>% cbind(dataDaily[,c(1:6)])
     }else{
-    dataDaily = lapply(dataDaily[,-c(1:6)] %>% dplyr::select_if(function(x) any(!is.na(x))) ,function(x){
-      # berryFunctions::movAv(dat=x,width=acclim_days,weights = rep(1, acclim_days)- seq(0,1, length.out = acclim_days))})%>% 
+    dataDaily = lapply(dataDaily[,-c(1:6)] %>% dplyr::select_if(function(x) any(!is.na(x))) ,function(y){
+      # berryFunctions::movAv(dat=y,width=acclim_days,weights = rep(1, acclim_days)- seq(0,1, length.out = acclim_days))})%>% 
       # as.data.frame() %>% cbind(dataDaily[,c(1:6)])
-      # TTR::EMA(x=x,n=acclim_days)})%>% 
+      # TTR::EMA(x=y,n=acclim_days)})%>% 
       # as.data.frame() %>% cbind(dataDaily[,c(1:6)])
-      pracma::movavg(x=x,n=acclim_days,type="e")})%>% 
-      as.data.frame() %>% cbind(dataDaily[,c(1:6)]) %>%cbind(dataDaily %>% dplyr::select_if(function(x) any(is.na(x))))
+      pracma::movavg(x=y,n=acclim_days,type="e")})%>% 
+      as.data.frame() %>% cbind(dataDaily[,c(1:6)]) %>%cbind(dataDaily %>% dplyr::select_if(function(x) all(is.na(x))))
     }
     
     # 4.0 Calculate P-model on daily upscaling values
@@ -412,7 +414,7 @@ rpmodel_subdaily <- function(
     DF <- lapply(DF, function(y) {
       if (is.numeric(y)) { 
         approx(as.numeric(DF$TIMESTAMP), y, method = gap_method, 
-               xout = as.numeric(DF$TIMESTAMP), rule = 2, ties = "constant")$y
+               xout = as.numeric(DF$TIMESTAMP), rule = 2)$y
         }else{
           y
         }
@@ -516,7 +518,14 @@ rpmodel_subdaily <- function(
 
 
 
-
+# df = dfIn
+# nrWindow = 1
+# hour_reference_T = c(10,12,15)
+# upscaling_method = "max_rad"
+# cicleday = 1
+# ciclemonth = 11
+# cicleyear = 2014
+# hourReference = 12
 
 dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,15), 
                              upscaling_method = "noon") {
@@ -533,8 +542,8 @@ dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,1
   }
   
   colMandatory = c('YEAR','MONTH','DAY','HOUR','MINUTE', 'TIMESTAMP')
-  if (upscaling_method == "max_rad")
-    colMandatory = c(colMandatory,"sw_in")
+  # if (upscaling_method == "max_rad")
+  #   colMandatory = c(colMandatory,"sw_in")
   
   if (!headerControl_dd(df = df, colMandatory = colMandatory))
     stop(headerControl_dd(df = df, colMandatory = colMandatory, showMsg = TRUE))
@@ -544,31 +553,32 @@ dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,1
   dfDayT = df[1,]    
   
   
-  for (cicloAnno in sort(unique(df$YEAR))) {
-    for (cicloMesi in seq(1,12)) {
-      for (cicloGiorni in seq(1,31)) {
+  for (cicleyear in sort(unique(df$YEAR))) {
+    for (ciclemonth in seq(1,12)) {
+      for (cicleday in seq(1,31)) {
         
-        posDay = which(df$YEAR == cicloAnno & df$MONTH == cicloMesi &
-                         df$DAY == cicloGiorni)
+        posDay = which(df$YEAR == cicleyear & df$MONTH == ciclemonth &
+                         df$DAY == cicleday)
         if (length(posDay) == 0) next
         
         for (hourReference in hour_reference_T) {
           # upscaling_method noon
           if (upscaling_method == "noon") {
-            posReference = which(df$YEAR == cicloAnno & df$MONTH == cicloMesi & df$DAY == cicloGiorni &
+            posReference = which(df$YEAR == cicleyear & df$MONTH == ciclemonth & df$DAY == cicleday &
                                    df$HOUR == hourReference & df$MINUTE == 0)
             if (length(posReference) == 0) next
             windowDay = seq(posReference - nrWindow,posReference + nrWindow)
           }
           # upscaling_method daily
           if (upscaling_method == "daily") {
-            posReference = which(df$YEAR == cicloAnno & df$MONTH == cicloMesi & df$DAY == cicloGiorni &
+            posReference = which(df$YEAR == cicleyear & df$MONTH == ciclemonth & df$DAY == cicleday &
                                    df$HOUR == 12 & df$MINUTE == 0)
-            windowDay = which(df$YEAR == cicloAnno & df$MONTH == cicloMesi & df$DAY == cicloGiorni)
+            refdate = lubridate::ymd_hms(paste(cicleyear,ciclemonth,cicleday,"12:00:00"))
+            windowDay = which(df$YEAR == cicleyear & df$MONTH == ciclemonth & df$DAY == cicleday)
           }
           # upscaling_method max_rad
           if (upscaling_method == "max_rad") {
-            posReferenceMax = which(df$YEAR == cicloAnno & df$MONTH == cicloMesi & df$DAY == cicloGiorni &
+            posReferenceMax = which(df$YEAR == cicleyear & df$MONTH == ciclemonth & df$DAY == cicleday &
                                       is.na(df$ppfd) == 0)
             if ( length(posReferenceMax) > 0 ) {
               
@@ -577,7 +587,7 @@ dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,1
               posReference = posReferenceMax[posMaxppfd[1]]
               windowDay = seq(posReference - nrWindow,posReference + nrWindow)
             } else {
-              posReference = which(df$YEAR == cicloAnno & df$MONTH == cicloMesi & df$DAY == cicloGiorni &
+              posReference = which(df$YEAR == cicleyear & df$MONTH == ciclemonth & df$DAY == cicleday &
                                      df$HOUR == 12 & df$MINUTE == 0)
               windowDay = NA
             }
@@ -610,13 +620,17 @@ dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,1
               if (length(tmp) == 0){
                 dfDay[1,col] = NA
               } else {
-                dfDay[1,col] = mean(tmp)
+                dfDay[1,col] = mean(tmp,na.rm=TRUE)
               }
               rm(tmp,posNa)
             }else{next}
           }
           
-          dfDay$TIMESTAMP = df$TIMESTAMP[posReference]
+          if (upscaling_method == "daily"){
+            dfDay$TIMESTAMP = refdate
+          }else{
+            dfDay$TIMESTAMP = df$TIMESTAMP[posReference]
+            }
           
           dfDayT = rbind(dfDayT,dfDay)  
           

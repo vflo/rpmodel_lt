@@ -1,27 +1,28 @@
 
-include_fapar_lai <- function(sfn, fapar_noaa, fapar){
+include_fapar_lai <- function(fn, fapar_noaa, fapar){
   fapar_noaa_filled <- fapar_noaa %>% 
-    filter(si_code == unique(sfn$si_code),
+    filter(site == unique(fn$site),
            FparLai_QC <= 1
     )%>%
-    group_by(date,si_code) %>% 
+    group_by(date,site) %>% 
     summarise_all(mean, na.rm = TRUE) %>% 
     dplyr::select(timestamp = date, Fapar = Fpar,Lai = Lai) %>%
     mutate(Fapar = Fapar*0.001, Lai = Lai*0.001, source = "NOAA")
   
   fapar_filled <- fapar %>% 
-    filter(si_code == unique(sfn$si_code),
+    filter(site == unique(fn$site),
            FparLai_QC %in% c(0,2)
     ) %>%
-    group_by(date,si_code) %>% 
+    group_by(date,site) %>% 
     summarise_all(mean, na.rm = TRUE) %>% 
     dplyr::select(timestamp = date, Fapar = Fpar,Lai = Lai) %>%
     mutate(Fapar = Fapar*0.01,Lai = Lai*0.1, source = "MODIS")
   
   fapar_filled <- fapar_noaa_filled %>% bind_rows(fapar_filled) %>% 
-    filter(timestamp>= min(sfn$timestamp, na.rm = TRUE),timestamp< max(sfn$timestamp, na.rm = TRUE))
+    filter(timestamp>= min(fn$timestamp, na.rm = TRUE),timestamp< max(fn$timestamp, na.rm = TRUE))
   
-  min_data = min(fapar_filled$timestamp)
+  min_date = min(fapar_filled$timestamp %>% 
+                   lubridate::as_date())
   
   # Build FAPAR model
   k_ <- as.integer(nrow(fapar_filled)*0.2)
@@ -46,38 +47,44 @@ include_fapar_lai <- function(sfn, fapar_noaa, fapar){
     # model_fapar <- GauPro::GauPro(x, y_fapar, parallel=TRUE)
     # model_lai <- GauPro::GauPro(x, y_lai, parallel=TRUE)
     # # 
-    # pred_FAPAR <- model_fapar$pred(sfn[,"timestamp"] %>%
+    # pred_FAPAR <- model_fapar$pred(fn[,"timestamp"] %>%
     #                                  lubridate::as_date() %>%
     #                                  as.numeric())
-    # pred_LAI <- model_lai$pred(sfn[,"timestamp"] %>%
+    # pred_LAI <- model_lai$pred(fn[,"timestamp"] %>%
     #                              lubridate::as_date() %>%
     #                              as.numeric())
-    pred_FAPAR <- predict(model_fapar, tibble(timestamp = sfn[,"timestamp"] %>%
+    pred_FAPAR <- predict(model_fapar, tibble(timestamp = fn$timestamp %>% 
                                                 lubridate::as_date() %>%
-                                                as.numeric()))
-    pred_LAI <- predict(model_lai, tibble(timestamp = sfn[,"timestamp"] %>%
+                                                as.numeric()%>% 
+                                                unique()))
+    pred_LAI <- predict(model_lai, tibble(timestamp = fn$timestamp %>%
                                             lubridate::as_date() %>%
-                                            as.numeric()))
+                                            as.numeric()%>% 
+                                            unique()))
     
-    sfn %>% 
-      left_join(tibble(timestamp = sfn$timestamp %>% 
+    fn %>% 
+      mutate(date = lubridate::as_date(timestamp)) %>% 
+      left_join(tibble(date = fn$timestamp%>% 
+                         lubridate::as_date() %>% 
                          unique(), 
                        FAPAR = pred_FAPAR) %>% 
-                  filter(timestamp > min_data) %>%
+                  filter(date > min_date) %>%
                   mutate(FAPAR = case_when(FAPAR<0~0,
                                            FAPAR>1~1,
                                            TRUE~FAPAR)),
-                by = "timestamp") %>% 
-      left_join(tibble(timestamp = sfn$timestamp %>% 
-                         unique(),  LAI = pred_LAI) %>%
-                  filter(timestamp > min_data) %>% 
+                by = "date") %>% 
+      left_join(tibble(date = fn$timestamp%>% 
+                         lubridate::as_date() %>% 
+                         unique(),  
+                       LAI = pred_LAI) %>%
+                  filter(date > min_date) %>% 
                   mutate(LAI = case_when(LAI<0~0,
                                          LAI>=0~LAI)),
-                by = "timestamp") %>% 
-      left_join(fapar_filled %>% mutate(timestamp = lubridate::ymd(timestamp)), by = "timestamp")
+                by = "date") %>% 
+      left_join(fapar_filled %>% mutate(date = lubridate::ymd(timestamp)), by = "date")
     
   }else{
-    sfn %>%
+    fn %>%
       left_join(fapar_filled %>% mutate(timestamp = lubridate::ymd(timestamp)), by = "timestamp") %>% 
       mutate(FAPAR = mean(Fapar,na.rm = TRUE),
              LAI = mean(Lai,na.rm = TRUE))

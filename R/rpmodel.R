@@ -138,7 +138,8 @@ rpmodel_lt <- function(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
       cpm = 75.38, #J mol^-1 ºC-1
-      kfFEC = 2.0, #Photon flux to energy μmol J-1 (Meek et al., 1984)
+      J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
+      frac_PAR = 0.5, #Fraction of incoming solar irradiance that is photosynthetically active radiation (PAR
       fanir = 0.35 #Fraction of NIR absorbed
     ),
     returnvar = NULL,
@@ -148,8 +149,10 @@ rpmodel_lt <- function(
   epsleaf = energy_params["epsleaf"] %>% as.numeric
   sigma = energy_params["ste_bolz"]%>% as.numeric
   cpm = energy_params["cpm"]%>% as.numeric #molar heat capacity of water 
-  kfFEC = energy_params["kfFEC"]%>% as.numeric
+  # kfFEC = energy_params["kfFEC"]%>% as.numeric
   fanir = energy_params["fanir"]%>% as.numeric
+  J_to_mol = energy_params["J_to_mol"]%>% as.numeric
+  frac_PAR = energy_params["frac_PAR"]%>% as.numeric
   tk = tc+273.15
   lat_heat = 2230 #J g^-1
   mol_gas_const = 8.3144621 #J mol^-1 K^-1
