@@ -81,7 +81,11 @@ include_fapar_lai <- function(fn, fapar_noaa, fapar){
                   mutate(LAI = case_when(LAI<0~0,
                                          LAI>=0~LAI)),
                 by = "date") %>% 
-      left_join(fapar_filled %>% mutate(date = lubridate::ymd(timestamp)), by = "date")
+      left_join(fapar_filled %>% 
+                  dplyr::mutate(date = lubridate::ymd(timestamp)) %>% 
+                  dplyr::ungroup() %>% 
+                  dplyr::select(-timestamp), 
+                by = "date")
     
   }else{
     fn %>%

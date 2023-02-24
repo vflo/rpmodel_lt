@@ -851,12 +851,12 @@ optimal_chi <- function(kmm, gammastar, ns_star, ca, vpd, beta, c4){
 #   return(mj)
 # }
 
-lue_vcmax_wang17 <- function(out_optchi, kphio, c_molmass, soilmstress){
+lue_vcmax_wang17 <- function(out_optchi, kphio, c_molmass, soilmstress,c_cost){
   
   ## Include effect of Jmax limitation
   len <- length(out_optchi[[1]])
 
-  kc <- 0.41   # Jmax cost coefficient
+  kc <- c_cost   # Jmax cost coefficient
 
   # ## Following eq. 17 in Stocker et al., 2020 GMD
   # tmp <- 1.0 - (kc / out_optchi$mj)^(2.0/3.0)
@@ -886,7 +886,7 @@ lue_vcmax_wang17 <- function(out_optchi, kphio, c_molmass, soilmstress){
 }
 
 
-lue_vcmax_smith19 <- function(out_optchi, kphio, c_molmass, soilmstress){
+lue_vcmax_smith19 <- function(out_optchi, kphio, c_molmass, soilmstress, c_cost){
   
   len <- length(out_optchi[[1]])
   
@@ -913,7 +913,7 @@ lue_vcmax_smith19 <- function(out_optchi, kphio, c_molmass, soilmstress){
   
   ## constants
   theta <- 0.85    # should be calibratable?
-  c_cost <- 0.05336251
+  c_cost <- c_cost
   
   
   ## factors derived as in Smith et al., 2019
@@ -1149,3 +1149,13 @@ calc_ga <- function(ws,ustar=NA,canopy_height, tcleaf_root,Ta,z,LAI,patm,mol_gas
   return(Ga)
 }
 
+
+
+calc_new_vpd <- function(tnew, told, vpd){
+  es = exp(34.494-4924.99/(told+237.1))/((told+105)^1.57)
+  ea = es - vpd
+  ei = exp(34.494-4924.99/(tnew+237.1))/((tnew+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
+  vpd_new = (ei - ea)
+  vpd_new = ifelse(vpd_new<0,0,vpd_new)
+  return(vpd_new)
+}

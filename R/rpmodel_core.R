@@ -37,6 +37,7 @@
 #'   parametrisation by  Cai & Prentice (2020).
 #' @param beta Unit cost ratio. Defaults to 146.0 (see Stocker et al., 2019) for
 #'   C3 plants and 146/9 for C4 plants.
+#' @param c_cost numeric if c_cost is manually added.
 #' @param soilm (Optional, used only if \code{do_soilmstress==TRUE}) Relative 
 #'  soil moisture as a fraction of field capacity (unitless). Defaults to 1.0 
 #'  (no soil moisture stress). This information is used to calculate
@@ -260,6 +261,7 @@ rpmodel_core <- function(
                                0.081785),
                         0.049977)),
   beta = ifelse(c4, 146/9, 146),
+  c_cost = 0.41, # Change to 0.05336251 if method_jmalim = "smith19" is used
   soilm = stopifnot(!do_soilmstress),
   meanalpha = 1.0,
   apar_soilm = 0.0,
@@ -369,7 +371,8 @@ rpmodel_core <- function(
       out_optchi,
       kphio,
       c_molmass,
-      soilmstress
+      soilmstress,
+      c_cost
       )
 
   } else if (method_jmaxlim=="smith19"){
@@ -378,7 +381,8 @@ rpmodel_core <- function(
       out_optchi,
       kphio,
       c_molmass,
-      soilmstress
+      soilmstress,
+      c_cost
       )
 
   } else if (method_jmaxlim=="none"){

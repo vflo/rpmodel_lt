@@ -20,6 +20,7 @@ rpmodel <- function(
                                  0.081785),
                           0.049977)),
     beta = ifelse(c4, 146/9, 146),
+    c_cost = 0.41,
     soilm = stopifnot(!do_soilmstress),
     meanalpha = 1.0,
     apar_soilm = 0.0,
@@ -55,6 +56,7 @@ rpmodel <- function(
       elv = elv,
       kphio = kphio,
       beta = beta,
+      c_cost = c_cost,
       soilm = soilm,
       meanalpha = meanalpha,
       apar_soilm = apar_soilm,
@@ -84,6 +86,7 @@ rpmodel <- function(
       z,
       kphio = kphio,
       beta = beta,
+      c_cost = c_cost,
       soilm = stopifnot(!do_soilmstress),
       meanalpha = meanalpha,
       apar_soilm = apar_soilm,
@@ -125,6 +128,7 @@ rpmodel_lt <- function(
                                  0.081785),
                           0.049977)),
     beta = ifelse(c4, 146/9, 146),
+    c_cost = 0.41,
     soilm = stopifnot(!do_soilmstress),
     meanalpha = 1.0,
     apar_soilm = 0.0,
@@ -181,71 +185,74 @@ rpmodel_lt <- function(
   }
 
 # calculate pmodel
-    tcleaf_new <- uniroot(function(tcleaf_root){
-      tkleaf = tcleaf_root+273.15
-      # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
-      ei = exp(34.494-4924.99/(tcleaf_root+237.1))/((tcleaf_root+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
-      vpd_new = (ei - ea)
-      vpd_new = ifelse(vpd_new<0,0,vpd_new)
-      df_res <- rpmodel_core(
-        tc,
-        tcleaf_root,
-        vpd_new,
-        co2,
-        fapar,
-        ppfd,
-        patm = patm,
-        elv = elv,
-        kphio = kphio,
-        beta = beta,
-        soilm = soilm,
-        meanalpha = meanalpha,
-        apar_soilm = apar_soilm,
-        bpar_soilm = bpar_soilm,
-        c4 = c4,
-        method_jmaxlim = method_jmaxlim,
-        do_ftemp_kphio = do_ftemp_kphio,
-        do_soilmstress = do_soilmstress,
-        returnvar = returnvarL,
-        verbose = verbose)
-      #Latent Heat Loss calculation
-      if(is.na(df_res$gs)){df_res$gs = 0}
-      if(length(df_res$gs) == 0){df_res$gs = 0}
-      if(is.infinite(df_res$gs)){df_res$gs = 100} 
-      gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
-      Hs = gs*cpm*(tcleaf_root-tc)
-      if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
-        gb = calc_ga(u,ustar,canopy_height,tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk)*patm/mol_gas_const/tk #mol m-2 s-1
-        gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-        gbs = gs * gb/(gs + gb)
-      }else{
-        gbs = gs
-        gbh = 0.92*gs
-      }
-      E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
-      lE = lat_heat*mol_mas_wv*E
-      
-      #Shortwave Energy Input
-      Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
-      Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
-      Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
-      
-      #Thermal Infrared Input
-      epssky = 1.72 * ((ea*1e-3)/tk)^0.143
-      Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
-      
-      #Thermal Infra-Red Losses
-      Qtirleaf = epsleaf*sigma*tkleaf^4
-      # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
-      # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
-      
-      #Convective Heat Exchange
-      Qc = gbh*cpm*(tcleaf_root-tc)
-      
-      Qsw + Qtir - Qtirleaf - Qc - lE
-    },
-    c(tc-15, tc+15))$root
-    
+  tcleaf_new <- tryCatch(
+      {uniroot(function(tcleaf_root){
+        tkleaf = tcleaf_root+273.15
+        # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
+        ei = exp(34.494-4924.99/(tcleaf_root+237.1))/((tcleaf_root+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
+        vpd_new = (ei - ea)
+        vpd_new = ifelse(vpd_new<0,0,vpd_new)
+        df_res <- rpmodel_core(
+          tc,
+          tcleaf_root,
+          vpd_new,
+          co2,
+          fapar,
+          ppfd,
+          patm = patm,
+          elv = elv,
+          kphio = kphio,
+          beta = beta,
+          c_cost = c_cost,
+          soilm = soilm,
+          meanalpha = meanalpha,
+          apar_soilm = apar_soilm,
+          bpar_soilm = bpar_soilm,
+          c4 = c4,
+          method_jmaxlim = method_jmaxlim,
+          do_ftemp_kphio = do_ftemp_kphio,
+          do_soilmstress = do_soilmstress,
+          returnvar = returnvarL,
+          verbose = verbose)
+        #Latent Heat Loss calculation
+        if(is.na(df_res$gs)){df_res$gs = 0}
+        if(length(df_res$gs) == 0){df_res$gs = 0}
+        if(is.infinite(df_res$gs)){df_res$gs = 100} 
+        gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
+        Hs = gs*cpm*(tcleaf_root-tc)
+        if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
+          gb = calc_ga(u,ustar,canopy_height,tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk)*patm/mol_gas_const/tk #mol m-2 s-1
+          gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+          gbs = gs * gb/(gs + gb)
+        }else{
+          gbs = gs
+          gbh = 0.92*gs
+        }
+        E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
+        lE = lat_heat*mol_mas_wv*E
+        
+        #Shortwave Energy Input
+        Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
+        Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
+        Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
+        
+        #Thermal Infrared Input
+        epssky = 1.72 * ((ea*1e-3)/tk)^0.143
+        Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
+        
+        #Thermal Infra-Red Losses
+        Qtirleaf = epsleaf*sigma*tkleaf^4
+        # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+        # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
+        
+        #Convective Heat Exchange
+        Qc = gbh*cpm*(tcleaf_root-tc)
+        
+        Qsw + Qtir - Qtirleaf - Qc - lE
+      },
+      c(tc-1, tc+1))$root},
+      error = function(e){return(tc)}
+     )
     tcleaf = tcleaf_new
     tkleaf = tcleaf+273.15
     ei = exp(34.494-4924.99/(tcleaf_new+237.1))/((tcleaf_new+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
@@ -262,6 +269,7 @@ rpmodel_lt <- function(
       elv = elv,
       kphio = kphio,
       beta = beta,
+      c_cost = c_cost,
       soilm = soilm,
       meanalpha = meanalpha,
       apar_soilm = apar_soilm,
