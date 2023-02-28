@@ -32,6 +32,8 @@
 #' \link{calc_patm}), if argument \code{patm} is not provided. If argument
 #' \code{patm} is provided, \code{elv} is overridden.
 #' @param z (Optional) Wind speed measurement height (m, defaults to \code{NA}).
+#' @param d (Optional) numeric, leaf characteristic width (m, defaults to \code{NA})
+#' @param netrad (optional) A numeric vector containing Net radiation in W m-2.
 #' @param kphio Apparent quantum yield efficiency (unitless). Defaults to
 #'  0.081785 for \code{method_jmaxlim="wang17", do_ftemp_kphio=TRUE, 
 #'  do_soilmstress=FALSE}, 0.087182 for \code{method_jmaxlim="wang17",
@@ -268,11 +270,11 @@
 #'
 rpmodel_subdaily <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
-    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA,
+    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, d = NA, netrad = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, meanalpha = 1.0, apar_soilm = 0.0, bpar_soilm = 0.73300,
     c4 = FALSE, method_jmaxlim = "wang17",
-    do_ftemp_kphio = TRUE, do_soilmstress = FALSE,do_leaftemp = FALSE, do_acclimation = FALSE,
+    do_ftemp_kphio = TRUE, do_soilmstress = FALSE,do_leaftemp = FALSE, simple_gb = TRUE, do_acclimation = FALSE,
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -324,18 +326,26 @@ rpmodel_subdaily <- function(
   }
   
   # 1.0 Calculate P model without acclimation
-  tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, ustar, canopy_height, sw_in, patm, meanalpha) %>% 
-    split(seq(nrow(.))) %>%
-    purrr::map_df(function(x){
-      res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
-                    x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
-                    unique(elv), unique(z), kphio, beta, c_cost,
-                    soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
-                    method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
-                    verbose = verbose, energy_params = energy_params)%>% 
-      as_tibble()
-    return(res)
-    }) -> df_Or
+  # tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, ustar, canopy_height, sw_in, netrad, patm, meanalpha) %>% 
+  #   split(seq(nrow(.))) %>%
+  #   purrr::map_df(function(x){
+    #   res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
+    #                 x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
+    #                 unique(elv), unique(z),x$netrad, kphio, beta, c_cost,
+    #                 soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
+    #                 method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
+    #                 verbose = verbose, energy_params = energy_params)%>% 
+    #   as_tibble()
+    # return(res)
+    # }) 
+  
+  rpmodel(tc, vpd, co2, fapar, LAI,
+          ppfd, u, ustar, canopy_height, sw_in, patm, 
+          elv, z, d, netrad, kphio, beta, c_cost,
+          soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
+          method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
+          simple_gb = simple_gb, verbose = verbose, energy_params = energy_params)%>% 
+    as_tibble()-> df_Or
   
   #DO ACCLIMATION?
   if(!do_acclimation){
@@ -359,6 +369,7 @@ rpmodel_subdaily <- function(
                    u = u,
                    ustar = ustar,
                    z = z,
+                   netrad = netrad,
                    LAI = LAI,
                    canopy_height = canopy_height,
                    patm = patm)
@@ -390,10 +401,10 @@ rpmodel_subdaily <- function(
         print(paste("acclimation of", x$TIMESTAMP))
         res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
                        x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
-                       unique(elv), unique(z), kphio, beta, c_cost,
+                       unique(elv), unique(z), d, x$netrad, kphio, beta, c_cost,
                        soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
                        method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = do_leaftemp,
-                       verbose = verbose, energy_params = energy_params)%>% 
+                       simple_gb = simple_gb, verbose = verbose, energy_params = energy_params)%>% 
           as_tibble()
         return(res)
       }) -> df_Mm
@@ -438,61 +449,61 @@ rpmodel_subdaily <- function(
           tk = x$tc+273.15
           # tcleaf = x$tc
           # tcleaf_new = tcleaf+1
+          
+          #################################################
           tcleaf_new <- uniroot(function(tcleaf_root){
             tkleaf = tcleaf_root+273.15
             # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
             ei = exp(34.494-4924.99/(tcleaf_root+237.1))/((tcleaf_root+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
             vpd_new = (ei - ea)
             vpd_new = ifelse(vpd_new<0,0,vpd_new)
-            df_res <- rpmodel_jmax_vcmax(tcleaf=tcleaf_root, tcleaf_opt = x$tcleaf_opt, vpd = vpd_new, ppfd = x$ppfd, 
-                                         ppfd_opt = x$ppfd_opt, fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
-                                         ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, patm = x$patm, ns_star_opt = x$ns_star_opt, 
-                                         gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, kmm = x$kmm, 
-                                         kmm_opt = x$kmm_opt, kphio = kphio, soilmstress = soilmstress, 
-                                         method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                                         beta = beta, c_cost = c_cost)
             
-            #Latent Heat Loss calculation
-            if(is.na(df_res$gs)){df_res$gs = 0}
-            if(length(df_res$gs) == 0){df_res$gs = 0}
-            if(is.infinite(df_res$gs)){df_res$gs = 100} 
-            gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
+            EB <- energy_balance(tcleaf=tcleaf_root, tcleaf_opt = x$tcleaf_opt, vpd = vpd_new, ppfd = x$ppfd, 
+                                 ppfd_opt = x$ppfd_opt, fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
+                                 ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, patm = x$patm, ns_star_opt = x$ns_star_opt, 
+                                 gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, kmm = x$kmm, 
+                                 kmm_opt = x$kmm_opt, kphio = kphio, soilmstress = soilmstress, 
+                                 method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                                 beta = beta, c_cost = c_cost, u = x$u, canopy_height = x$canopy_height,
+                                 tc = x$tc, tk = tk, tkleaf = tkleaf, z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+                                 mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
+                                 lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, sigma = sigma, cpm = cpm,
+                                 epsleaf = epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
+                                 fanir = fanir, ei = ei, ea = ea, simple_gb = simple_gb, d = d)
             
-            if(!is.na(x$u)&!is.na(x$canopy_height)&!is.na(x$tc)&!is.na(x$z)&!is.na(x$LAI)){
-              # gb = 1/resistance_neutral(ws_mean=x$u, canopy_height = x$canopy_height) * x$patm/mol_gas_const/tk #mol m-2 s-1
-              gb = calc_ga(ws=x$u, ustar = x$ustar, canopy_height = x$canopy_height, tcleaf_root,x$tc,x$z,x$LAI, x$patm,mol_gas_const,tk) * x$patm/mol_gas_const/tk #mol m-2 s-1
-              gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-              gbs = gs * gb/(gs + gb)
-            }else{
-              print("No atmospheric conductance was calculated.")
-              gbs = gs
-              gbh = 0.92*gs
-            }
-            E = gbs*(vpd_new)*x$patm/(x$patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
-            lE = lat_heat*mol_mas_wv*E
-            
-            #Shortwave Energy Input
-            Rs_PAR_Wm2 = x$fapar*x$ppfd/(J_to_mol*frac_PAR)
-            Rs_NIR_Wm2 = fanir*x$ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
-            Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
-            
-            #Thermal Infrared Input
-            epssky = 1.72 * ((ea*1e-3)/tk)^0.143
-            Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
-            
-            #Thermal Infra-Red Losses
-            Qtirleaf = epsleaf*sigma*tkleaf^4
-            # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
-            # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
-            
-            #Convective Heat Exchange
-            Qc = gbh*cpm*(tcleaf_root-x$tc)
-            
-            Qsw + Qtir - Qtirleaf - Qc - lE
+            #final balance
+            EB$Rnet - EB$Qc - EB$lE
           },
-          c(x$tc-20, x$tc+20))$root
-        return(tibble(tcleaf_new=tcleaf_new ,Q_tcleaf_new = 1))},
-        error= function(e){return(tibble(tcleaf_new=x$tc, Q_tcleaf_new = 0))})
+          c(x$tc-30, x$tc+30))$root
+          ##################################################
+          
+          tkleaf = tcleaf_new+273.15
+          # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
+          ei = exp(34.494-4924.99/(tcleaf_new+237.1))/((tcleaf_new+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
+          vpd_new = (ei - ea)
+          vpd_new = ifelse(vpd_new<0,0,vpd_new)
+          EB <- energy_balance(tcleaf=tcleaf_new, tcleaf_opt = x$tcleaf_opt, vpd = vpd_new, ppfd = x$ppfd, 
+                               ppfd_opt = x$ppfd_opt, fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
+                               ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, patm = x$patm, ns_star_opt = x$ns_star_opt, 
+                               gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, kmm = x$kmm, 
+                               kmm_opt = x$kmm_opt, kphio = kphio, soilmstress = soilmstress, 
+                               method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                               beta = beta, c_cost = c_cost, u = x$u, canopy_height = x$canopy_height,
+                               tc = x$tc, tk = tk, tkleaf = tkleaf, z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+                               mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
+                               lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, sigma = sigma, cpm = cpm,
+                               epsleaf = epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
+                               fanir = fanir, ei = ei, ea = ea, simple_gb = simple_gb, d = d)
+          
+        return(tibble(tcleaf_new=tcleaf_new ,Q_tcleaf_new = 1, Qc = EB$Qc, 
+                      Rnet = EB$Rnet, le = EB$le, Qtir = EB$Qtir, 
+                      Qtirleaf = EB$Qtirleaf, gb = EB$gb))
+          },
+        error= function(e){
+          return(tibble(tcleaf_new=x$tc, Q_tcleaf_new = 0, Qc = NA, Rnet = NA,
+                        le = NA, Qtir = NA, Qtirleaf = NA, gb = NA))
+          }
+        )
     }) %>% bind_rows() 
     tcleaf = tcleaf_new$tcleaf_new %>% as.numeric()
     tkleaf = tcleaf+273.15
@@ -515,7 +526,15 @@ rpmodel_subdaily <- function(
                               beta = beta, c_cost = c_cost)
     
     
-    if(do_leaftemp){out$Q_tcleaf <-  tcleaf_new$Q_tcleaf_new}
+    if(do_leaftemp){
+      out$Q_tcleaf <-  tcleaf_new$Q_tcleaf_new
+      out$Qc <-  tcleaf_new$Qc
+      out$Rnet <-  tcleaf_new$Rnet
+      out$gb <-  tcleaf_new$gb
+      out$Qtir <-  tcleaf_new$Qtir
+      out$Qtirleaf <-  tcleaf_new$Qtirleaf
+      out$le <-  tcleaf_new$le
+    }
     
     return(out)
   }
@@ -1003,6 +1022,78 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   
 }
 
+
+energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd, 
+                           ppfd_opt, fapar, fapar_opt, ca, 
+                           ca_opt, xi, xiPa, patm, ns_star_opt, 
+                           gammastar, gammastar_opt, kmm, 
+                           kmm_opt, kphio, soilmstress, 
+                           method_jmaxlim, c4, rd_to_vcmax, 
+                           beta, c_cost, u, canopy_height,
+                           tc, tk, tkleaf, z, LAI, ustar, netrad, mol_gas_const,
+                           J_to_mol, lat_heat, mol_mas_wv, sigma, cpm,
+                           epsleaf, epssky, frac_PAR, fanir, ei, ea, simple_gb, d){
+  df_res <- rpmodel_jmax_vcmax(tcleaf=tcleaf_root, tcleaf_opt = tcleaf_opt, vpd = vpd_new, ppfd = ppfd, 
+                               ppfd_opt = ppfd_opt, fapar = fapar, fapar_opt = fapar_opt, ca = ca, 
+                               ca_opt = ca_opt, xi = xi, xiPa = xiPa, patm = patm, ns_star_opt = ns_star_opt, 
+                               gammastar = gammastar, gammastar_opt = gammastar_opt, kmm = kmm, 
+                               kmm_opt = kmm_opt, kphio = kphio, soilmstress = soilmstress, 
+                               method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                               beta = beta, c_cost = c_cost)
+  
+  #Latent Heat Loss calculation
+  if(is.na(df_res$gs)){df_res$gs = 0}
+  if(length(df_res$gs) == 0){df_res$gs = 0}
+  if(is.infinite(df_res$gs)){df_res$gs = 100} 
+  gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
+  
+  if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
+    if(simple_gb){
+      gb = 0.00662*sqrt(u/d)
+      gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+      gbs = gs * gb/(gs + gb)
+    }else{
+      # gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height) * patm/mol_gas_const/tk #mol m-2 s-1
+      gb = calc_ga(ws=u, ustar = ustar, canopy_height = canopy_height, tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk) * patm/mol_gas_const/tk #mol m-2 s-1
+      gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+      gbs = gs * gb/(gs + gb)
+    }
+
+  }else{
+    print("No atmospheric conductance was calculated.")
+    gbs = gs
+    gbh = 0.92*gs
+  }
+  E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
+  lE = lat_heat*mol_mas_wv*E
+  
+
+    #Shortwave Energy Input
+    Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
+    Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
+    Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
+    
+    #Thermal Infrared Input
+    epssky = 1.72 * ((ea*1e-3)/tk)^0.143
+    Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
+    
+    #Thermal Infra-Red Losses
+    Qtirleaf = epsleaf*sigma*tkleaf^4
+    # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+    # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
+    
+  if(is.na(netrad)){
+    Rnet = Qsw + Qtir - Qtirleaf
+  }else{
+    Rnet = netrad
+  }
+  
+  #Convective Heat Exchange
+  Qc = gbh*cpm*(tcleaf_root-tc)
+  
+  
+  return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb))
+}
 
 # Function to fill in the missing data of a vector according to the settings
 # param: v, data vector to be filled

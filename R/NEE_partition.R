@@ -21,10 +21,11 @@ plot(df$timestamp,df$USTAR_1_1_1)
 sites_metadata <- read_delim("R/data/sites_metadata.csv", 
                               delim = "\t", escape_double = FALSE, 
                               trim_ws = TRUE)
-#3,4,5,7,51,65
+#Sites where the nee partition failed:
+#"CR-SoC" "PR-xGU" "US-xSP" "US-xTE"
 #### Estimate partition ####
-purrr::map2(.x=as.list(filenames.fluxnet)[c(1)],
-            .y=sites_metadata[c(1),]%>%
+purrr::map2(.x=as.list(filenames.fluxnet)[3],
+            .y=sites_metadata[3,]%>%
               split(seq(nrow(.))),
             .f=function(x = .x, y=.y){
               site <- do.call(rbind, strsplit(basename(x), "_"))[,2]
@@ -44,8 +45,8 @@ purrr::map2(.x=as.list(filenames.fluxnet)[c(1)],
 #### Obtain final database ####
 filenames_fluxnet <- list.files(path="R/data/sites", "*.csv$", full.names=TRUE,recursive = TRUE)
 filenames_fluxnet_name <- list.files(path="R/data/sites", "*.csv$", full.names=FALSE,recursive = TRUE)
-# index <- 11
-purrr::map(as.list(c(8:70)),function(index){
+# index <- 1
+purrr::map(as.list(c(1:72)),function(index){
   filename <- filenames_fluxnet[index]
   filename_name <- filenames_fluxnet_name[index]
   fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",")
@@ -62,6 +63,8 @@ purrr::map(as.list(c(8:70)),function(index){
                              -starts_with("CO2_M"),
                              -starts_with("H2O"),
                              -starts_with("H_S")) %>% 
+    mutate(T_CANOPY = ifelse(length(grep("^T_CANOPY$", names(df), value = TRUE))==0,NA_real_,
+                             get(grep("^T_CANOPY", names(df), value = TRUE)[1]))) %>% #Some sites don't have T_CANOPY variable
     mutate(DateTime = DateTime,
            TIMESTAMP_START = TIMESTAMP_START,
            TIMESTAMP_END = TIMESTAMP_END,
@@ -71,39 +74,44 @@ purrr::map(as.list(c(8:70)),function(index){
            NEE = NEE_f,
            GPP = GPP,#
            RECO = RECO,
-           H = rowMeans(select(df,starts_with("H")),na.rm=TRUE),
+           H = case_when(length(grep("^H", names(df), value = TRUE))>0~
+                           rowMeans(dplyr::select(df,starts_with("H")),na.rm=TRUE),
+                         TRUE~NA_real_),
+           LW_OUT = case_when(length(grep("^LW_OUT", names(df), value = TRUE))>0~
+                           rowMeans(dplyr::select(df,starts_with("LW_OUT")),na.rm=TRUE),
+                         TRUE~NA_real_),
            SW_IN = SW_IN,
            VPD = VPD_PI,
            PPFD = SW_IN * (kfFEC*(1 - kalb_vis)),#bigleaf::Rg.to.PPFD(SW_IN, J_to_mol = 4.6, frac_PAR = 0.5),#rowMeans(select(df,starts_with("PPFD_IN")),na.rm=TRUE),
-           WS = rowMeans(select(df,starts_with("WS")),na.rm=TRUE),
+           WS = rowMeans(dplyr::select(df,starts_with("WS")),na.rm=TRUE),
            NETRAD = NETRAD,
            CO2 = case_when(length(grep("^CO2_PI$", names(df), value = TRUE))>0~
-                             rowMeans(select(df,starts_with("CO2_PI")),na.rm=TRUE),
-                           TRUE~rowMeans(select(df,-starts_with("CO2_PI")) %>% 
-                                           select(starts_with("CO2")),na.rm=TRUE)),
+                             rowMeans(dplyr::select(df,starts_with("CO2_PI")),na.rm=TRUE),
+                           TRUE~rowMeans(dplyr::select(df,-starts_with("CO2_PI")) %>% 
+                                           dplyr::select(starts_with("CO2")),na.rm=TRUE)),
            PA = case_when(length(grep("^PA_PI$", names(df), value = TRUE))>0~
-                            rowMeans(select(df,starts_with("PA_PI")),na.rm=TRUE),
-                          TRUE~rowMeans(select(df,-starts_with("PA_PI")) %>% 
-                                          select(starts_with("PA")),na.rm=TRUE)),
+                            rowMeans(dplyr::select(df,starts_with("PA_PI")),na.rm=TRUE),
+                          TRUE~rowMeans(dplyr::select(df,-starts_with("PA_PI")) %>% 
+                                          dplyr::select(starts_with("PA")),na.rm=TRUE)),
            LE = case_when(length(grep("^LE_PI$", names(df), value = TRUE))>0~
-                            rowMeans(select(df,starts_with("LE_PI")),na.rm=TRUE),
-                          TRUE~rowMeans(select(df,-starts_with("LE_PI")) %>% 
-                                          select(starts_with("LE")),na.rm=TRUE)),
+                            rowMeans(dplyr::select(df,starts_with("LE_PI")),na.rm=TRUE),
+                          TRUE~rowMeans(dplyr::select(df,-starts_with("LE_PI")) %>% 
+                                          dplyr::select(starts_with("LE")),na.rm=TRUE)),
            P = case_when(length(grep("^P_PI$", names(df), value = TRUE))>0~
-                           rowMeans(select(df,starts_with("P_PI")),na.rm=TRUE),
-                         TRUE~rowMeans(select(df,-starts_with(c("PP","P_PI","PA"))) %>% 
-                                         select(starts_with("P")),na.rm=TRUE)),
+                           rowMeans(dplyr::select(df,starts_with("P_PI")),na.rm=TRUE),
+                         TRUE~rowMeans(dplyr::select(df,-starts_with(c("PP","P_PI","PA"))) %>% 
+                                         dplyr::select(starts_with("P")),na.rm=TRUE)),
            SWC = case_when(length(grep("^SWC_PI$", names(df), value = TRUE))>0~
-                             rowMeans(select(df,starts_with("SWC_PI")),na.rm=TRUE),
-                           TRUE~rowMeans(select(df,-starts_with("SWC_PI")) %>% 
-                                           select(starts_with("SWC")),na.rm=TRUE)),
+                             rowMeans(dplyr::select(df,starts_with("SWC_PI")),na.rm=TRUE),
+                           TRUE~rowMeans(dplyr::select(df,-starts_with("SWC_PI")) %>% 
+                                           dplyr::select(starts_with("SWC")),na.rm=TRUE)),
            # Tcan =  rowMeans(select(df,starts_with("T_CANOPY")),na.rm=TRUE)
-           Tcan =  ifelse(length(grep("^T_CANOPY", names(.), value = TRUE))>0,
-                          get(grep("^T_CANOPY", names(.), value = TRUE)[1]),
-                          NA)
+           Tcan =  case_when(length(grep("^T_CANOPY", names(.), value = TRUE))>0~
+                               get(grep("^T_CANOPY", names(.), value = TRUE)[1]),
+                             TRUE~NA_real_)
            ) %>%
              dplyr::select(DateTime,TIMESTAMP_START, TIMESTAMP_END, Tair, Ustar, rH,NEE, GPP,RECO,H,
-                           SW_IN, VPD, PPFD, WS, NETRAD, CO2, PA, LE, P, SWC, Tcan)
+                           LW_OUT, SW_IN, VPD, PPFD, WS, NETRAD, CO2, PA, LE, P, SWC, Tcan)
   
   summary(df)
   
@@ -119,7 +127,7 @@ filenames_fluxnet <- list.files(path="R/data/final_sites", "*.csv$", full.names=
 filenames_fluxnet
 
 #Ha1
-index <- 8
+index <- 10
 filename <- filenames_fluxnet[index]
 fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/HF.RData")
@@ -135,7 +143,7 @@ fluxnet_data <- fluxnet_data %>%
 write.csv(fluxnet_data, filename, row.names=FALSE)
 
 #Me2
-index <- 10
+index <- 12
 filename <- filenames_fluxnet[index]
 fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/MR.RData")
@@ -150,7 +158,7 @@ fluxnet_data <- fluxnet_data %>%
 write.csv(fluxnet_data, filename, row.names=FALSE)
 
 #NR1
-index <- 11
+index <- 13
 filename <- filenames_fluxnet[index]
 fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/NW.Rdata")
@@ -165,7 +173,7 @@ fluxnet_data <- fluxnet_data %>%
 write.csv(fluxnet_data, filename, row.names=FALSE)
 
 #WRC
-index <- 27
+index <- 29
 filename <- filenames_fluxnet[index]
 fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/WR.RData")

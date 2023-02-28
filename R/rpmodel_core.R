@@ -292,7 +292,7 @@ rpmodel_core <- function(
     patm <- calc_patm(elv)
   }
 
-  if(is.na(tcleaf)){tcleaf <- tc}
+  tcleaf <- ifelse(is.na(tcleaf),tc,tcleaf)
   
   #---- Fixed parameters--------------------------------------------------------
   c_molmass <- 12.0107  # molecular mass of carbon (g)

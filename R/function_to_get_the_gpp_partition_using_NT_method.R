@@ -21,11 +21,19 @@ part_nee<-function(filename,lat,lon,outpath=getwd(),start_q = NA, end_q = NA, dt
 		fluxnet_data$NEE_f<-fluxnet_data[,..namec]
 		fluxnet_data$NEE_fqc=rep(0,length(fluxnet_data[,1])) 
 	}
-	#some NEE_PI report NAs..??
+	#some NEE_PI report all NAs..??
 	if(sum(is.na(fluxnet_data$NEE_f))==length(fluxnet_data$NEE_f)){
 		namec<-grep("FC", names(fluxnet_data), value = TRUE)[1]
 		fluxnet_data$NEE_f<-fluxnet_data[,..namec]
 	}
+	
+	#some NEE_PI report some NAs..??
+	if(length(grep("FC", names(fluxnet_data), value = TRUE))>=1){
+	  fluxnet_data <- fluxnet_data %>% 
+	    mutate(NEE_f = coalesce(NEE_f,get(grep("FC", names(fluxnet_data), value = TRUE)[1])))
+	}
+	
+	
 	##### correct the names
 	if(length(grep("^PPFD_IN_PI", names(fluxnet_data), value = TRUE))>0){
 	  nameppfd<-grep("^PPFD_IN_PI", names(fluxnet_data), value = TRUE)[1]

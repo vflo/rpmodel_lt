@@ -13,6 +13,8 @@ rpmodel <- function(
     patm = NA, 
     elv = NA, 
     z = NA,
+    d = NA,
+    netrad = NA,
     kphio = ifelse(c4, 1.0,
                    ifelse(do_ftemp_kphio,
                           ifelse(do_soilmstress,
@@ -30,6 +32,7 @@ rpmodel <- function(
     do_ftemp_kphio = TRUE,
     do_soilmstress = FALSE,
     do_leaftemp = FALSE,
+    simple_gb = TRUE,
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -84,6 +87,8 @@ rpmodel <- function(
       patm, 
       elv, 
       z,
+      d = d,
+      netrad,
       kphio = kphio,
       beta = beta,
       c_cost = c_cost,
@@ -96,6 +101,7 @@ rpmodel <- function(
       do_ftemp_kphio = do_ftemp_kphio,
       do_soilmstress = do_soilmstress,
       do_leaftemp = do_leaftemp,
+      simple_gb = simple_gb,
       energy_params = energy_params,
       returnvar = returnvar,
       verbose = verbose)
@@ -121,6 +127,8 @@ rpmodel_lt <- function(
     patm = NA, 
     elv = NA, 
     z = NA,
+    d = NA,
+    netrad = NA,
     kphio = ifelse(c4, 1.0,
                    ifelse(do_ftemp_kphio,
                           ifelse(do_soilmstress,
@@ -138,6 +146,7 @@ rpmodel_lt <- function(
     do_ftemp_kphio = TRUE,
     do_soilmstress = FALSE,
     do_leaftemp = FALSE,
+    simple_gb = TRUE,
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -221,9 +230,15 @@ rpmodel_lt <- function(
         gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
         Hs = gs*cpm*(tcleaf_root-tc)
         if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
-          gb = calc_ga(u,ustar,canopy_height,tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk)*patm/mol_gas_const/tk #mol m-2 s-1
-          gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-          gbs = gs * gb/(gs + gb)
+          if(simple_gb){
+            gb = 0.00662*sqrt(u/d)
+            gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+            gbs = gs * gb/(gs + gb)
+          }else{
+           gb = calc_ga(u,ustar,canopy_height,tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk)*patm/mol_gas_const/tk #mol m-2 s-1
+           gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+           gbs = gs * gb/(gs + gb)
+          }
         }else{
           gbs = gs
           gbh = 0.92*gs
@@ -245,12 +260,19 @@ rpmodel_lt <- function(
         # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
         # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
         
+        if(is.na(netrad)){
+          Rnet = Qsw + Qtir - Qtirleaf
+        }else{
+          Rnet = netrad
+        }
+        
+        
         #Convective Heat Exchange
         Qc = gbh*cpm*(tcleaf_root-tc)
         
-        Qsw + Qtir - Qtirleaf - Qc - lE
+        Rnet - Qc - lE
       },
-      c(tc-1, tc+1))$root},
+      c(tc-20, tc+20))$root},
       error = function(e){return(tc)}
      )
     tcleaf = tcleaf_new
