@@ -427,6 +427,7 @@ rpmodel_core <- function(
 
   # Jmax using again A_J = A_C, derive the "Jmax limitation factor" 
   fact_jmaxlim <- vcmax * (ci + 2.0 * gammastar) / (kphio * iabs * (ci + kmm))
+  fact_jmaxlim[which(vcmax == 0)] <- 0
   
   # use definition of Jmax limitation factor (L in Eq. 13) and solve for Jmax.
   jmax <- 4.0 * kphio * iabs / sqrt( (1.0/fact_jmaxlim)^2 - 1.0 )

@@ -270,11 +270,11 @@
 #'
 rpmodel_subdaily <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
-    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, d = NA, netrad = NA,
+    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, leafwidth = NA, netrad = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, meanalpha = 1.0, apar_soilm = 0.0, bpar_soilm = 0.73300,
-    c4 = FALSE, method_jmaxlim = "wang17",
-    do_ftemp_kphio = TRUE, do_soilmstress = FALSE,do_leaftemp = FALSE, simple_gb = TRUE, do_acclimation = FALSE,
+    c4 = FALSE, method_jmaxlim = "wang17",do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
+    do_leaftemp = FALSE, gb_method = "Su_2001", do_acclimation = FALSE,
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -305,6 +305,8 @@ rpmodel_subdaily <- function(
   lat_heat = 2230 #J g^-1
   mol_gas_const = 8.3144621 #J mol^-1 K^-1
   mol_mas_wv = 18.01528 #g mol-1
+  mol_mas_dry_air = 28.9652 #g mol-1
+  CP <- 1005 # specific heat capacity of air at constant pressure (J kg-1 K-1)
   spe_gas_const = mol_gas_const/mol_mas_wv #J g^-1 K^-1
   
   #---- soil moisture stress as a function of soil moisture and mean alpha -----
@@ -341,10 +343,10 @@ rpmodel_subdaily <- function(
   
   rpmodel(tc, vpd, co2, fapar, LAI,
           ppfd, u, ustar, canopy_height, sw_in, patm, 
-          elv, z, d, netrad, kphio, beta, c_cost,
+          elv, z, leafwidth, netrad, kphio, beta, c_cost,
           soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
           method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
-          simple_gb = simple_gb, verbose = verbose, energy_params = energy_params)%>% 
+          gb_method = gb_method, verbose = verbose, energy_params = energy_params)%>% 
     as_tibble()-> df_Or
   
   #DO ACCLIMATION?
@@ -401,10 +403,11 @@ rpmodel_subdaily <- function(
         print(paste("acclimation of", x$TIMESTAMP))
         res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
                        x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
-                       unique(elv), unique(z), d, x$netrad, kphio, beta, c_cost,
+                       unique(elv), unique(z), leafwidth, x$netrad, kphio, beta, c_cost,
                        soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
-                       method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = do_leaftemp,
-                       simple_gb = simple_gb, verbose = verbose, energy_params = energy_params)%>% 
+                       method_jmaxlim, do_ftemp_kphio, do_soilmstress, 
+                       do_leaftemp = do_leaftemp, gb_method = gb_method, 
+                       verbose = verbose, energy_params = energy_params)%>% 
           as_tibble()
         return(res)
       }) -> df_Mm
@@ -443,38 +446,54 @@ rpmodel_subdaily <- function(
       purrr::map_df(function(x){
         tryCatch({
           print(x$TIMESTAMP)
+          rho <- calc_air_density(x$patm, x$tc)  # air density (kg m-3)
           es = exp(34.494-4924.99/(x$tc+237.1))/((x$tc+105)^1.57)
           ea = es - x$vpd
           patm = x$patm
           tk = x$tc+273.15
+          tcleaf_dew <- tk/(1-17.27^(-1)*log(ea/es))-273.15
+          # Td = (243.5 * log(ea/es) + (17.67 * x$tc)/(x$tc + 243.5)) / 
+          #   (17.67 - log(ea/es) - (17.67 * x$tc)/(x$tc + 243.5))
           # tcleaf = x$tc
           # tcleaf_new = tcleaf+1
-          
+          # "2015-05-09 01:00:00 UTC"
           #################################################
-          tcleaf_new <- uniroot(function(tcleaf_root){
+          tcleaf_new <- optimise(function(tcleaf_root){
+            # print(tcleaf_root)
             tkleaf = tcleaf_root+273.15
             # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
             ei = exp(34.494-4924.99/(tcleaf_root+237.1))/((tcleaf_root+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
             vpd_new = (ei - ea)
             vpd_new = ifelse(vpd_new<0,0,vpd_new)
-            
-            EB <- energy_balance(tcleaf=tcleaf_root, tcleaf_opt = x$tcleaf_opt, vpd = vpd_new, ppfd = x$ppfd, 
-                                 ppfd_opt = x$ppfd_opt, fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
-                                 ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, patm = x$patm, ns_star_opt = x$ns_star_opt, 
-                                 gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, kmm = x$kmm, 
-                                 kmm_opt = x$kmm_opt, kphio = kphio, soilmstress = soilmstress, 
-                                 method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                                 beta = beta, c_cost = c_cost, u = x$u, canopy_height = x$canopy_height,
-                                 tc = x$tc, tk = tk, tkleaf = tkleaf, z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+
+            EB <- energy_balance(tcleaf=tcleaf_root, tcleaf_opt = x$tcleaf_opt, 
+                                 vpd = vpd_new, ppfd = x$ppfd, ppfd_opt = x$ppfd_opt, 
+                                 fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
+                                 ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, 
+                                 patm = x$patm, ns_star_opt = x$ns_star_opt, 
+                                 gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, 
+                                 kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio, 
+                                 soilmstress = soilmstress, method_jmaxlim = method_jmaxlim,
+                                 c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                                 beta = beta, c_cost = c_cost, 
+                                 u = x$u, canopy_height = x$canopy_height,
+                                 tc = x$tc, tk = tk, tkleaf = tkleaf, 
+                                 z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
                                  mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
-                                 lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, sigma = sigma, cpm = cpm,
+                                 lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
+                                 sigma = sigma, cpm = cpm, CP = CP, rho = rho,
                                  epsleaf = epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
-                                 fanir = fanir, ei = ei, ea = ea, simple_gb = simple_gb, d = d)
-            
+                                 fanir = fanir, ei = ei, ea = ea, gb_method = gb_method, 
+                                 leafwidth = leafwidth)
+            if(is.na(x$netrad)){
+              Rnet = EB$Rnet
+            }else{
+              Rnet = x$netrad
+            }
             #final balance
-            EB$Rnet - EB$Qc - EB$lE
+            (Rnet - EB$Qc - EB$lE)^2
           },
-          c(x$tc-30, x$tc+30))$root
+          interval=c(tcleaf_dew, x$tc+30))$minimum
           ##################################################
           
           tkleaf = tcleaf_new+273.15
@@ -482,26 +501,35 @@ rpmodel_subdaily <- function(
           ei = exp(34.494-4924.99/(tcleaf_new+237.1))/((tcleaf_new+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
           vpd_new = (ei - ea)
           vpd_new = ifelse(vpd_new<0,0,vpd_new)
-          EB <- energy_balance(tcleaf=tcleaf_new, tcleaf_opt = x$tcleaf_opt, vpd = vpd_new, ppfd = x$ppfd, 
-                               ppfd_opt = x$ppfd_opt, fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
-                               ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, patm = x$patm, ns_star_opt = x$ns_star_opt, 
-                               gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, kmm = x$kmm, 
-                               kmm_opt = x$kmm_opt, kphio = kphio, soilmstress = soilmstress, 
-                               method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                               beta = beta, c_cost = c_cost, u = x$u, canopy_height = x$canopy_height,
-                               tc = x$tc, tk = tk, tkleaf = tkleaf, z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+          EB <- energy_balance(tcleaf=tcleaf_new, tcleaf_opt = x$tcleaf_opt, 
+                               vpd = vpd_new, ppfd = x$ppfd, ppfd_opt = x$ppfd_opt, 
+                               fapar = x$fapar, fapar_opt = x$fapar_opt, ca = x$ca, 
+                               ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, 
+                               patm = x$patm, ns_star_opt = x$ns_star_opt, 
+                               gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, 
+                               kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio, 
+                               soilmstress = soilmstress, method_jmaxlim = method_jmaxlim,
+                               c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                               beta = beta, c_cost = c_cost, 
+                               u = x$u, canopy_height = x$canopy_height,
+                               tc = x$tc, tk = tk, tkleaf = tkleaf, 
+                               z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
                                mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
-                               lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, sigma = sigma, cpm = cpm,
+                               lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
+                               sigma = sigma, cpm = cpm, CP = CP, rho = rho,
                                epsleaf = epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
-                               fanir = fanir, ei = ei, ea = ea, simple_gb = simple_gb, d = d)
+                               fanir = fanir, ei = ei, ea = ea,  gb_method = gb_method,
+                               leafwidth = leafwidth)
           
         return(tibble(tcleaf_new=tcleaf_new ,Q_tcleaf_new = 1, Qc = EB$Qc, 
-                      Rnet = EB$Rnet, le = EB$le, Qtir = EB$Qtir, 
-                      Qtirleaf = EB$Qtirleaf, gb = EB$gb))
+                      tcleaf_dew = tcleaf_dew, Rnet = EB$Rnet, lE = EB$lE, 
+                      Qtir = EB$Qtir, Qtirleaf = EB$Qtirleaf, gb = EB$gb, 
+                      ust = EB$ust))
           },
         error= function(e){
-          return(tibble(tcleaf_new=x$tc, Q_tcleaf_new = 0, Qc = NA, Rnet = NA,
-                        le = NA, Qtir = NA, Qtirleaf = NA, gb = NA))
+          return(tibble(tcleaf_new=x$tc, Q_tcleaf_new = 0, tcleaf_dew = tcleaf_dew,
+                        Qc = NA, Rnet = NA, le = NA, Qtir = NA, Qtirleaf = NA, 
+                        gb = NA, ust = NA))
           }
         )
     }) %>% bind_rows() 
@@ -514,7 +542,7 @@ rpmodel_subdaily <- function(
     vpd_new = ifelse(vpd_new<0,0,vpd_new)
     }else{
       tcleaf = tc
-      vpd_new = vpd
+      vpd_new = vpd 
     }
     
     # 7 Calculate acclimated subdaily
@@ -533,7 +561,9 @@ rpmodel_subdaily <- function(
       out$gb <-  tcleaf_new$gb
       out$Qtir <-  tcleaf_new$Qtir
       out$Qtirleaf <-  tcleaf_new$Qtirleaf
-      out$le <-  tcleaf_new$le
+      out$lE <-  tcleaf_new$lE
+      out$ust <-  tcleaf_new$ust
+      out$tcleaf_dew <- tcleaf_new$tcleaf_dew
     }
     
     return(out)
@@ -684,41 +714,41 @@ dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,1
 #' @param showMsg Logical. If TRUE, it shows the function messages. Defaults to \code{FALSE}.
 #' @return TRUE or FALSE. 
 
-headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck,showMsg = F) {
-  
-  # string of mandatory variables, missing
-  errorColMissing = c()
-  
-  # string of mandatory variables, duplicate
-  errorColMultiple = c()
-  
-  for (col in colMandatory){
-    ckMandatory = which(colnames(df) == col)
-    if (length(ckMandatory) == 0) {
-      errorColMissing = c(errorColMissing,col)
-      next
-    }
-    if (length(ckMandatory) > 1) {
-      errorColMultiple = c(errorColMultiple,col)
-      next
-    }
-  }
-  rm(col)
-  if (showMsg) {
-    cat(sprintf('missing mandatory variables: %d \n',length(errorColMissing)))   
-    if (length(errorColMissing) > 0)
-      cat(sprintf(' (%s)\n',paste(errorColMissing,collapse = ',')))
-    
-    cat(sprintf('multiple mandatory variables: %d \n',length(errorColMultiple)))
-    if (length(errorColMultiple) > 0)
-      cat(sprintf(' (%s)\n',paste(errorColMultiple,collapse = ',')))
-  }
-  if ( (length(errorColMissing) + length(errorColMultiple)) > 0) {
-    return(FALSE)
-  } else {
-    return(TRUE)
-  }
-}
+# headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck,showMsg = F) {
+#   
+#   # string of mandatory variables, missing
+#   errorColMissing = c()
+#   
+#   # string of mandatory variables, duplicate
+#   errorColMultiple = c()
+#   
+#   for (col in colMandatory){
+#     ckMandatory = which(colnames(df) == col)
+#     if (length(ckMandatory) == 0) {
+#       errorColMissing = c(errorColMissing,col)
+#       next
+#     }
+#     if (length(ckMandatory) > 1) {
+#       errorColMultiple = c(errorColMultiple,col)
+#       next
+#     }
+#   }
+#   rm(col)
+#   if (showMsg) {
+#     cat(sprintf('missing mandatory variables: %d \n',length(errorColMissing)))   
+#     if (length(errorColMissing) > 0)
+#       cat(sprintf(' (%s)\n',paste(errorColMissing,collapse = ',')))
+#     
+#     cat(sprintf('multiple mandatory variables: %d \n',length(errorColMultiple)))
+#     if (length(errorColMultiple) > 0)
+#       cat(sprintf(' (%s)\n',paste(errorColMultiple,collapse = ',')))
+#   }
+#   if ( (length(errorColMissing) + length(errorColMultiple)) > 0) {
+#     return(FALSE)
+#   } else {
+#     return(TRUE)
+#   }
+# }
 
 
 
@@ -730,75 +760,75 @@ headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck
 # rdname: runningMean
 
 
-runningMean <- function(data_x_running_mean_t = df, daily_window = 10) {
-  
-  unique_hour = sort(unique(data_x_running_mean_t$HOUR))
-  
-  data_running_mean_t = data_x_running_mean_t[1,]
-  
-  for (cy_hour_ref in unique_hour) {
-    pos_hour = which(data_x_running_mean_t$HOUR == cy_hour_ref)
-    
-    data_x_running_mean = data_x_running_mean_t[pos_hour,]
-    rm(pos_hour)
-    # window of time 
-    lunghezza_finestra = daily_window - 1# remotion of one day since the computation starts from the 1st
-    data_running_mean = data_x_running_mean[1,]
-    
-    for ( ciclo_inizio_mm in seq(2,nrow(data_x_running_mean)) ) {
-      # definition of positions to compute the running mean by making a counter in reverse
-      posizioni_rm = (ciclo_inizio_mm - lunghezza_finestra):ciclo_inizio_mm
-      
-      pos_meno1 = which(posizioni_rm < 1)
-      if ( length(pos_meno1) > 0 ) posizioni_rm = posizioni_rm[-1*pos_meno1]
-      rm(pos_meno1)
-      
-      # cycle for computing the mean of the dataset's variables
-      media_1 = data_x_running_mean[1,]
-      for ( ciclo_variabili in colnames(media_1) ) {
-        # dataset creation with values to use
-        data_1 = data_x_running_mean[posizioni_rm,ciclo_variabili]
-        if ( !is.numeric(data_1) ) {
-          media_1[ciclo_variabili] = NA
-          next
-        }
-        # NA remotion
-        pos_na = which(is.na(data_1) == 1 )
-        if ( length(pos_na) > 0 ) data_1 = data_1[-1*pos_na]
-        rm(pos_na)
-        # if there are missing values it puts NA, otherwise it computes the mean
-        if ( length(data_1) == 0 ) {
-          media_1[ciclo_variabili] = NA
-        } else {
-          media_1[ciclo_variabili] = mean(data_1)
-        }
-        rm(data_1)
-      }
-      rm(ciclo_variabili)
-      media_1$TIMESTAMP = data_x_running_mean$TIMESTAMP[ciclo_inizio_mm]
-      data_running_mean = rbind(data_running_mean,media_1)
-      rm(media_1)
-      rm(posizioni_rm)
-    }
-    rm(ciclo_inizio_mm)
-    rm(lunghezza_finestra)
-    rm(data_x_running_mean)
-    data_running_mean_t = rbind(data_running_mean_t,data_running_mean)
-  }
-  
-  data_running_mean_t = data_running_mean_t[-1,]
-  
-  # library(lubridate)
-  # data_running_mean_t$YEAR = year(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-  # data_running_mean_t$MONTH = month(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-  # data_running_mean_t$DAY = day(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-  # data_running_mean_t$HOUR = hour(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-  # data_running_mean_t$MINUTE = minute(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-  
-  data_running_mean_t = data_running_mean_t[order(data_running_mean_t$TIMESTAMP),]
-  
-  return(data_running_mean_t)
-}
+# runningMean <- function(data_x_running_mean_t = df, daily_window = 10) {
+#   
+#   unique_hour = sort(unique(data_x_running_mean_t$HOUR))
+#   
+#   data_running_mean_t = data_x_running_mean_t[1,]
+#   
+#   for (cy_hour_ref in unique_hour) {
+#     pos_hour = which(data_x_running_mean_t$HOUR == cy_hour_ref)
+#     
+#     data_x_running_mean = data_x_running_mean_t[pos_hour,]
+#     rm(pos_hour)
+#     # window of time 
+#     lunghezza_finestra = daily_window - 1# remotion of one day since the computation starts from the 1st
+#     data_running_mean = data_x_running_mean[1,]
+#     
+#     for ( ciclo_inizio_mm in seq(2,nrow(data_x_running_mean)) ) {
+#       # definition of positions to compute the running mean by making a counter in reverse
+#       posizioni_rm = (ciclo_inizio_mm - lunghezza_finestra):ciclo_inizio_mm
+#       
+#       pos_meno1 = which(posizioni_rm < 1)
+#       if ( length(pos_meno1) > 0 ) posizioni_rm = posizioni_rm[-1*pos_meno1]
+#       rm(pos_meno1)
+#       
+#       # cycle for computing the mean of the dataset's variables
+#       media_1 = data_x_running_mean[1,]
+#       for ( ciclo_variabili in colnames(media_1) ) {
+#         # dataset creation with values to use
+#         data_1 = data_x_running_mean[posizioni_rm,ciclo_variabili]
+#         if ( !is.numeric(data_1) ) {
+#           media_1[ciclo_variabili] = NA
+#           next
+#         }
+#         # NA remotion
+#         pos_na = which(is.na(data_1) == 1 )
+#         if ( length(pos_na) > 0 ) data_1 = data_1[-1*pos_na]
+#         rm(pos_na)
+#         # if there are missing values it puts NA, otherwise it computes the mean
+#         if ( length(data_1) == 0 ) {
+#           media_1[ciclo_variabili] = NA
+#         } else {
+#           media_1[ciclo_variabili] = mean(data_1)
+#         }
+#         rm(data_1)
+#       }
+#       rm(ciclo_variabili)
+#       media_1$TIMESTAMP = data_x_running_mean$TIMESTAMP[ciclo_inizio_mm]
+#       data_running_mean = rbind(data_running_mean,media_1)
+#       rm(media_1)
+#       rm(posizioni_rm)
+#     }
+#     rm(ciclo_inizio_mm)
+#     rm(lunghezza_finestra)
+#     rm(data_x_running_mean)
+#     data_running_mean_t = rbind(data_running_mean_t,data_running_mean)
+#   }
+#   
+#   data_running_mean_t = data_running_mean_t[-1,]
+#   
+#   # library(lubridate)
+#   # data_running_mean_t$YEAR = year(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
+#   # data_running_mean_t$MONTH = month(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
+#   # data_running_mean_t$DAY = day(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
+#   # data_running_mean_t$HOUR = hour(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
+#   # data_running_mean_t$MINUTE = minute(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
+#   
+#   data_running_mean_t = data_running_mean_t[order(data_running_mean_t$TIMESTAMP),]
+#   
+#   return(data_running_mean_t)
+# }
 
 
 
@@ -1031,8 +1061,9 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                            method_jmaxlim, c4, rd_to_vcmax, 
                            beta, c_cost, u, canopy_height,
                            tc, tk, tkleaf, z, LAI, ustar, netrad, mol_gas_const,
-                           J_to_mol, lat_heat, mol_mas_wv, sigma, cpm,
-                           epsleaf, epssky, frac_PAR, fanir, ei, ea, simple_gb, d){
+                           J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
+                           epsleaf, epssky, frac_PAR, fanir, ei, ea, gb_method, 
+                           leafwidth){
   df_res <- rpmodel_jmax_vcmax(tcleaf=tcleaf_root, tcleaf_opt = tcleaf_opt, vpd = vpd_new, ppfd = ppfd, 
                                ppfd_opt = ppfd_opt, fapar = fapar, fapar_opt = fapar_opt, ca = ca, 
                                ca_opt = ca_opt, xi = xi, xiPa = xiPa, patm = patm, ns_star_opt = ns_star_opt, 
@@ -1042,143 +1073,48 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                                beta = beta, c_cost = c_cost)
   
   #Latent Heat Loss calculation
-  if(is.na(df_res$gs)){df_res$gs = 0}
-  if(length(df_res$gs) == 0){df_res$gs = 0}
-  if(is.infinite(df_res$gs)){df_res$gs = 100} 
-  gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
+    if(is.na(df_res$gs)){df_res$gs = 0}
+    if(length(df_res$gs) == 0){df_res$gs = 0}
+    if(is.infinite(df_res$gs)){df_res$gs = 100} 
+    gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
   
-  if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
-    if(simple_gb){
-      gb = 0.00662*sqrt(u/d)
-      gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-      gbs = gs * gb/(gs + gb)
+    if(is.na(ustar)){
+      ust <- calc_ustar(u,canopy_height,z,LAI)
     }else{
-      # gb = 1/resistance_neutral(ws_mean=u, canopy_height = canopy_height) * patm/mol_gas_const/tk #mol m-2 s-1
-      gb = calc_ga(ws=u, ustar = ustar, canopy_height = canopy_height, tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk) * patm/mol_gas_const/tk #mol m-2 s-1
-      gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-      gbs = gs * gb/(gs + gb)
+      ust <- ustar
     }
+  
+  # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
 
-  }else{
-    print("No atmospheric conductance was calculated.")
-    gbs = gs
-    gbh = 0.92*gs
-  }
-  E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
-  lE = lat_heat*mol_mas_wv*E
+    gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
+                 tc,z,LAI, patm,mol_gas_const,tk,gb_method,leafwidth) 
+    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+    gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
+    gbs = gs * gb/(gs + gb)
+  
+    E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
+    lE = lat_heat*mol_mas_wv*E
   
 
-    #Shortwave Energy Input
+  #Shortwave Energy Input
     Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
     Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
     Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
     
-    #Thermal Infrared Input
+  #Thermal Infrared Input
     epssky = 1.72 * ((ea*1e-3)/tk)^0.143
     Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
     
-    #Thermal Infra-Red Losses
-    Qtirleaf = epsleaf*sigma*tkleaf^4
-    # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
-    # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
+  #Thermal Infra-Red Losses
+    # Qtirleaf = epsleaf*sigma*tkleaf^4
+    Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+    # Qtirleaf = epsleaf*epssky*sigma*tkleaf^4
     
-  if(is.na(netrad)){
     Rnet = Qsw + Qtir - Qtirleaf
-  }else{
-    Rnet = netrad
-  }
-  
+
   #Convective Heat Exchange
-  Qc = gbh*cpm*(tcleaf_root-tc)
+    Qc = gbh*rho*CP*(tcleaf_root-tc)
   
   
-  return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb))
+  return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))
 }
-
-# Function to fill in the missing data of a vector according to the settings
-# param: v, data vector to be filled
-# param: vYear, vector of the years
-# param: vMonth, vector of the months
-# param: vDay, vector of the days
-# param: vHour, vector of the hours
-# param: vMinute, vector of the minutes
-# param: approccio (approach) if 'constant' replicates measured data on missing values;
-#                             if 'linear' it applies linear regression to fill in missing values among measured data
-# param: showMsg (if T shows the function messages)
-# return: a vector with required inputs for pmodelPlus
-# rdname: gapFilling
-
-# gapFilling = function(v = vettore,v_name = NA,
-#                       vYear = vYear, vMonth = vMonth, vDay = vDay,
-#                       vHour = vHour, vMinute = vMinute, showMsg = F,
-#                       approccio = 'constant') {
-#   
-#   # check if there are values in v 
-#   if ( sum(is.na(v)) == length(v) ) {
-#     warning('variable not gap filled\n') 
-#     return(v)
-#   }
-#   str_msg = ''
-#   if (!is.na(v_name))
-#     str_msg = paste0(str_msg,sprintf('GAP FILLING variable: %s\n',v_name))
-#   
-#   str_msg = paste0(str_msg,
-#                    sprintf('approach: %s\nmissing value%s: %s\n',
-#                            approccio,
-#                            ifelse(sum(is.na(v)) == 1,'','s'),sum(is.na(v))))
-#   
-#   if (showMsg)
-#     cat(str_msg)
-#   
-#   if (approccio == 'constant') {
-#     # 
-#     # for (cyr in seq(2,length(v))) {
-#     # 
-#     #   if (is.na(v[cyr]))
-#     #     v[cyr] = v[cyr-1]
-#     # }
-#     # rm(cyr)
-#     posValori = which(is.na(v) == 0)
-#     for (contaV in posValori) {
-#       
-#       yearToUse  = vYear[contaV]
-#       monthToUse = vMonth[contaV]
-#       dayToUse   = vDay[contaV]
-#       vToUse = v[contaV]
-#       
-#       posToUse = which(
-#         vYear == yearToUse &
-#           vMonth == monthToUse &
-#           vDay == dayToUse)
-#       
-#       if ( length(posToUse) > 0 )
-#         v[posToUse] = vToUse
-#       
-#       rm(yearToUse,monthToUse,dayToUse)
-#       rm(vToUse,posToUse)
-#     }
-#     rm(contaV)
-#   }
-#   #approccio: 'linear' 
-#   if (approccio == 'linear') {
-#     posValori = which(is.na(v) == 0)
-#     for (contaV in seq(2,length(posValori))) {
-#       # slope computetation 
-#       x1 = posValori[contaV - 1]
-#       x2 = posValori[contaV]
-#       y1 = v[x1]
-#       y2 = v[x2]
-#       slope = (y2 - y1) / (x2-x1)
-#       intercept = y1 - (slope*x1)
-#       itp = (slope * seq(x1,x2)) + intercept
-#       v[seq(x1,x2)] = itp
-#     }
-#   }
-#   
-#   if (showMsg)
-#     cat(sprintf('GAP FILLING COMPLETED\nmissing value%s:%d\n',
-#                 ifelse(sum(is.na(v)) == 1,'','s'),sum(is.na(v))))
-#   
-#   return(v)
-#   
-# }

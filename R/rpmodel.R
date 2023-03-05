@@ -13,7 +13,7 @@ rpmodel <- function(
     patm = NA, 
     elv = NA, 
     z = NA,
-    d = NA,
+    leafwidth = NA,
     netrad = NA,
     kphio = ifelse(c4, 1.0,
                    ifelse(do_ftemp_kphio,
@@ -32,7 +32,7 @@ rpmodel <- function(
     do_ftemp_kphio = TRUE,
     do_soilmstress = FALSE,
     do_leaftemp = FALSE,
-    simple_gb = TRUE,
+    gb_method = "Su_2001",
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -87,7 +87,7 @@ rpmodel <- function(
       patm, 
       elv, 
       z,
-      d = d,
+      leafwidth = leafwidth,
       netrad,
       kphio = kphio,
       beta = beta,
@@ -101,7 +101,7 @@ rpmodel <- function(
       do_ftemp_kphio = do_ftemp_kphio,
       do_soilmstress = do_soilmstress,
       do_leaftemp = do_leaftemp,
-      simple_gb = simple_gb,
+      gb_method = gb_method,
       energy_params = energy_params,
       returnvar = returnvar,
       verbose = verbose)
@@ -127,7 +127,7 @@ rpmodel_lt <- function(
     patm = NA, 
     elv = NA, 
     z = NA,
-    d = NA,
+    leafwidth = NA,
     netrad = NA,
     kphio = ifelse(c4, 1.0,
                    ifelse(do_ftemp_kphio,
@@ -146,7 +146,7 @@ rpmodel_lt <- function(
     do_ftemp_kphio = TRUE,
     do_soilmstress = FALSE,
     do_leaftemp = FALSE,
-    simple_gb = TRUE,
+    gb_method = "Su_2001",
     energy_params = list(
       epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -170,11 +170,15 @@ rpmodel_lt <- function(
   lat_heat = 2230 #J g^-1
   mol_gas_const = 8.3144621 #J mol^-1 K^-1
   mol_mas_wv = 18.01528 #g mol-1
+  mol_mas_dry_air = 28.9652 #g mol-1
+  CP <- 1005 # specific heat capacity of air at constant pressure (J kg-1 K-1)
+  rho <- calc_air_density(patm, tc)  # air density (kg m-3)
   spe_gas_const = mol_gas_const/mol_mas_wv #J g^-1 K^-1
   es_T0 = 610.8 #Pa
   # es = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tk)) # Pa (Clausius–Clapeyron relation) 
   es = exp(34.494-4924.99/(tc+237.1))/((tc+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
   ea = es - vpd
+  tcleaf_dew <- tk/(1-17.27^(-1)*log(ea/es))-273.15
   # Check arguments
   if (identical(NA, elv) && identical(NA, patm)){
     stop(
@@ -195,7 +199,7 @@ rpmodel_lt <- function(
 
 # calculate pmodel
   tcleaf_new <- tryCatch(
-      {uniroot(function(tcleaf_root){
+      {optimise(function(tcleaf_root){
         tkleaf = tcleaf_root+273.15
         # ei = es_T0*exp(lat_heat/spe_gas_const*(1/273.15-1/tkleaf)) #assuming saturation within the leaf (We don't apply psi_leaf correction es(T)exp(ψleaf V/(RT)))
         ei = exp(34.494-4924.99/(tcleaf_root+237.1))/((tcleaf_root+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
@@ -228,21 +232,20 @@ rpmodel_lt <- function(
         if(length(df_res$gs) == 0){df_res$gs = 0}
         if(is.infinite(df_res$gs)){df_res$gs = 100} 
         gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
-        Hs = gs*cpm*(tcleaf_root-tc)
-        if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)){
-          if(simple_gb){
-            gb = 0.00662*sqrt(u/d)
-            gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-            gbs = gs * gb/(gs + gb)
-          }else{
-           gb = calc_ga(u,ustar,canopy_height,tcleaf_root,tc,z,LAI, patm,mol_gas_const,tk)*patm/mol_gas_const/tk #mol m-2 s-1
-           gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-           gbs = gs * gb/(gs + gb)
-          }
+
+        # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
+        
+        if(is.na(ustar)){
+          ust <- calc_ustar(u,canopy_height,z,LAI)
         }else{
-          gbs = gs
-          gbh = 0.92*gs
+          ust <- ustar
         }
+
+        gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
+                     tc,z,LAI, patm,mol_gas_const,tk,gb_method,leafwidth)  #mol m-2 s-1
+        gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+        gb = gb * patm/mol_gas_const/tk
+        gbs = gs * gb/(gs + gb)
         E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
         lE = lat_heat*mol_mas_wv*E
         
@@ -256,9 +259,9 @@ rpmodel_lt <- function(
         Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
         
         #Thermal Infra-Red Losses
-        Qtirleaf = epsleaf*sigma*tkleaf^4
-        # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
-        # Qtirleaf = 2*epsleaf*epssky*sigma*tkleaf^4
+        # Qtirleaf = epsleaf*sigma*tkleaf^4
+        Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+        # Qtirleaf = epsleaf*epssky*sigma*tkleaf^4
         
         if(is.na(netrad)){
           Rnet = Qsw + Qtir - Qtirleaf
@@ -268,11 +271,11 @@ rpmodel_lt <- function(
         
         
         #Convective Heat Exchange
-        Qc = gbh*cpm*(tcleaf_root-tc)
+        Qc = gbh*rho*CP*(tcleaf_root-tc)
         
-        Rnet - Qc - lE
+        (Rnet - Qc - lE)^2
       },
-      c(tc-20, tc+20))$root},
+      c(tcleaf_dew, tc+20))$minimum},
       error = function(e){return(tc)}
      )
     tcleaf = tcleaf_new
@@ -309,3 +312,4 @@ rpmodel_lt <- function(
   return(df_res)
   
 }
+
