@@ -1111,8 +1111,8 @@ calc_ustar <- function(ws,canopy_height,z,LAI){
 }
 
 
-calc_ga <- function(ws,ust,canopy_height, tcleaf_root,
-                    Ta,z,LAI,patm,mol_gas_const,tk, gb_method, 
+calc_ga <- function(ws, ust, canopy_height, tcleaf_root,
+                    Ta, z, LAI, patm, mol_gas_const, rho, tk, gb_method, 
                     leafwidth){
   # Tan et al.2019 + Chu et al. 2018 (Supporting information)
   u <- ws
@@ -1124,33 +1124,58 @@ calc_ga <- function(ws,ust,canopy_height, tcleaf_root,
   g <- 9.8 # gravity constant (m s-2)
   CP <- 1005 # specific heat capacity of air at constant pressure (J kg-1 K-1)
   cpm <- 75.38 #J mol-1 K-1
-  rho <- 1.234 # air density (kg m-3)
+  # rho <- 1.234 # air density (kg m-3)
   mh <- 2 # ln(zm/z0)Stanton number (dimensionless) (see : DETERMINATION OF ROUGHNESS LENGTHS FOR HEAT AND MOMENTUM OVER BOREAL FORESTS!!!!)
-  Hs <- 0.01*0.92*cpm*(tcleaf_root-Ta)*patm/mol_gas_const/tk #sensible head flux (w m-2)
+  Hs <- 0.01*cpm*(tcleaf_root-Ta) #sensible head flux (w m-2)
   Hs_wrong <- TRUE
   counter <- 0
-
   
-  while(Hs_wrong){
-  EPs <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
   GaM <- 1/(u/ust^2) # aerodynamic conductance for momentum (m s-1)
   GbN <- 1/(1/(k*ust)*mh) # boundary layer conductance under neutral condition (m s-1)
   GbN2 <- 1/(1.35*ust^(-2/3)) # boundary layer conductance according to Thom 1972
-  if (EPs<0){
-    x=(1-16*EPs)^(1/4)
-    faiM=2*log(0.5*(1+x))+log(0.5*(1+x^2))-2*atan(x)+1.5708 # diabatic correction factor for momentum
-    faiH=2*log(0.5*(1+x^2))   # diabatic correction factor for heat
-    
-    Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
-    Ga=1/(1/(Gb)+1/(GaM))      # aerodynamic conductance for water vapor 
-  }else{
-    faiM=6*log(1+EPs)
-    faiH=6*log(1+EPs)
-    Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
-    Ga=1/(1/(Gb)+1/(GaM))
-  }
   
-  Hs_new = Ga*0.92*cpm*(tcleaf_root-Ta)*patm/mol_gas_const/tk
+  while(Hs_wrong){
+    if(gb_method %in% c("Choudhury_1988")){
+
+      zeta <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
+      x_h = x_m <- -5
+      y_h <- (1 - 16 * zeta)^0.5
+      y_m <- (1 - 16 * zeta)^0.25
+      if(zeta<0){
+        psi_h <- 2 * log((1 + y_h)/2)
+        psi_m <- 2 * log((1 + y_m)/2) + log((1 + y_m^2)/2) -2 * atan(y_m) + pi/2
+      }else{
+        psi_h <- x_h * zeta
+        psi_m <- x_m * zeta
+      }
+      
+      z0m <- (z - d) * exp(-k * u/ust - psi_m)
+      wind_zh  <- pmax(0, (ust/k) * (log(pmax(0,(z - d))/z0m) - psi_m))
+      alpha <- 4.39 - 3.97 * exp(-0.258 * LAI)
+      Gb_h <- LAI * ((0.02/alpha) * sqrt(wind_zh/leafwidth) * 
+                       (1 - exp(-alpha/2)))
+      Ra_m <- pmax((log((z - d)/z0m) - psi_h), 0)/(k * ust)
+      Ra <- Ra_m + 1/Gb_h
+      Ga <- 1/Ra/0.92
+      
+    }else{
+      zeta <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
+      if (zeta<0){#unstable
+        x=(1-16*zeta)^(1/4)
+        faiM=2*log(0.5*(1+x))+log(0.5*(1+x^2))-2*atan(x)+1.5708 # diabatic correction factor for momentum
+        faiH=2*log(0.5*(1+x^2))   # diabatic correction factor for heat
+        Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
+        Ga=1/(1/(Gb)+1/(GaM))      # aerodynamic conductance for water vapor 
+      }else{#stable
+        faiM=6*log(1+zeta)
+        faiH=6*log(1+zeta)
+        Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
+        Ga=1/(1/(Gb)+1/(GaM))
+      }
+      
+    }
+    
+  Hs_new = Ga*0.92*cpm*(tcleaf_root-Ta)
   if(counter == 100){
     Hs_new <-  Hs
     Ga=1/(1/(GbN2)+1/(GaM))
@@ -1163,91 +1188,6 @@ calc_ga <- function(ws,ust,canopy_height, tcleaf_root,
   
   return(Ga)
 }
-
-
-
-calc_gb_Choudhury <-  function(ws,ust,canopy_height, tcleaf_root,
-                               Ta, z, LAI, patm,mol_gas_const, tk, 
-                               gb_method, leafwidth, k, z0m = NULL){
-
-  alpha <- 4.39 - 3.97 * exp(-0.258 * LAI)
-
-    if(is.null(z0m)){
-    estimate_z0m <- TRUE
-    z0m <- NULL
-    }else{
-    estimate_z0m <- FALSE
-    }
-  wind_zh <- wind.profile(data = data, z = zh, Tair = Tair, 
-                          pressure = pressure, ustar = ustar, H = H, zr = zr, 
-                          estimate_z0m = estimate_z0m, zh = zh, d = d, z0m = z0m, 
-                          frac_z0m = NULL, stab_correction = TRUE, stab_formulation = stab_formulation)
-  wind_zh <- pmax(0.01, wind_zh)
-  Gb_h <- LAI * ((0.02/alpha) * sqrt(wind_zh/leafwidth) * 
-                   (1 - exp(-alpha/2)))
-  Rb_h <- 1/Gb_h
-  kB_h <- Rb_h * constants$k * ustar
-  return(data.frame(Gb_h, kB_h))
-}
-
-
-
-# 
-# 
-# function (data, z, Tair = "Tair", pressure = "pressure", ustar = "ustar", 
-#           H = "H", wind = "wind", zr, zh, d = NULL, frac_d = 0.7, 
-#           z0m = NULL, frac_z0m = NULL, estimate_z0m = TRUE, stab_correction = TRUE, 
-#           stab_formulation = c("Dyer_1970", "Businger_1971"), constants = bigleaf.constants()) 
-# {
-#   stab_formulation <- match.arg(stab_formulation)
-#   check.input(data, ustar)
-#   if (is.null(d)) {
-#     if (is.null(frac_d)) {
-#       stop("Either 'd' or 'frac_d' must be specified")
-#     }
-#     d <- frac_d * zh
-#   }
-#   if (is.null(z0m) & !estimate_z0m) {
-#     if (is.null(frac_z0m)) {
-#       stop("Either 'z0m' or 'frac_z0m' must be specified if 'estimate_z0m' = FALSE")
-#     }
-#     z0m <- frac_z0m * zh
-#   }
-#   if (estimate_z0m) {
-#     if (!is.null(z0m) | !is.null(frac_z0m)) {
-#       cat("Note that arguments 'z0m' and 'frac_z0m' are ignored if 'estimate_z0m' = TRUE. z0m is\n           calculated from the logarithmic wind_profile equation.", 
-#           fill = TRUE)
-#     }
-#     check.input(data, Tair, pressure, wind, ustar, H)
-#     z0m <- roughness.parameters(method = "wind_profile", 
-#                                 zh = zh, zr = zr, d = d, data = data, Tair = Tair, 
-#                                 pressure = pressure, wind = wind, ustar = ustar, 
-#                                 H = H, stab_roughness = TRUE, stab_formulation = stab_formulation, 
-#                                 constants = constants)[, "z0m"]
-#   }
-#   if (any(z < (d + z0m) & !is.na(d + z0m))) {
-#     warning("function is only valid for heights above d + z0m! Wind speed for heights below d + z0m will return 0!")
-#   }
-#   if (stab_correction) {
-#     zeta <- stability.parameter(data = data, Tair = Tair, 
-#                                 pressure = pressure, ustar = ustar, H = H, zr = z, 
-#                                 d = d, constants = constants)
-#     psi_m <- stability.correction(zeta, formulation = stab_formulation)[, 
-#                                                                         "psi_m"]
-#     wind_heights <- pmax(0, (ustar/constants$k) * (log(pmax(0, 
-#                                                             (z - d))/z0m) - psi_m))
-#   }
-#   else {
-#     wind_heights <- pmax(0, (ustar/constants$k) * (log(pmax(0, 
-#                                                             (z - d))/z0m)))
-#   }
-#   return(wind_heights)
-# }
-# 
-
-
-
-
 
 
 

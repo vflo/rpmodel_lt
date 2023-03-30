@@ -46,7 +46,7 @@ purrr::map2(.x=as.list(filenames.fluxnet)[3],
 filenames_fluxnet <- list.files(path="R/data/sites", "*.csv$", full.names=TRUE,recursive = TRUE)
 filenames_fluxnet_name <- list.files(path="R/data/sites", "*.csv$", full.names=FALSE,recursive = TRUE)
 index <- 12
-purrr::map(as.list(c(1:72)),function(index){
+purrr::map(as.list(c(10,12,13,29)),function(index){
   filename <- filenames_fluxnet[index]
   filename_name <- filenames_fluxnet_name[index]
   fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",")
@@ -149,7 +149,7 @@ fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/MR.RData")
 names(MR)
 foo <- MR %>% 
-  mutate(Tcan = lead(Tcan_Avg_corr,2),
+  mutate(Tcan = Tcan_Avg_corr,2,
          DateTime = (date - lubridate::minutes(15))%>% force_tz(tzone = "UTC")) %>% 
   dplyr::select(DateTime,Tcan)
 fluxnet_data <- fluxnet_data %>% 

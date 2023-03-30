@@ -18,6 +18,7 @@ sapply(list("R/rpmodel_core.R","R/rpmodel.R","R/rpmodel_subdaily.R",
 library(MASS)
 library(ggplot2)
 library(viridis)
+library(Metrics)
 get_density <- function(x, y, ...) {
   dens <- MASS::kde2d(x, y, ...)
   ix <- findInterval(x, dens$x)
@@ -46,7 +47,7 @@ filenames.fluxnet<- list.files(path="R/data/final_sites", "*.csv$", full.names=T
 # filename <- filenames.fluxnet[5]
 # filename <- filenames.fluxnet[112]
 # filename <- filenames.fluxnet[100]
-filename <- filenames.fluxnet[12]
+filename <- filenames.fluxnet[13]
 fluxnet_data <- data.table::fread(filename, header = T, 
                               quote = "\"", sep = ",", na.strings = c("NA", "-9999"), 
                               colClasses = "numeric", integer64 = "character")
@@ -71,28 +72,28 @@ data_flx <- data_flx_pre %>%
          GPP = case_when(GPP<0~0,
                          TRUE~GPP))
 summary(data_flx)
-# data_flx <- data_flx %>% slice(1000:3000)
+data_flx <- data_flx %>% slice(1:3000)
 #Approximate epsleaf
 data_flx %>% 
   filter(SW_IN<25,
-         WS<0.01
+         WS<0.1
          ) %>% 
   mutate(epsleaf = LW_OUT/(5.67e-8*(Tcan+273.15)^4)) %>% 
   summarise(epsleaf = mean(epsleaf,na.rm =TRUE))
 
 res <- rpmodel_subdaily(TIMESTAMP = data_flx$DateTime, tc = data_flx$Tair, vpd = data_flx$VPD*100,
                         co2 = data_flx$CO2, fapar = data_flx$FAPAR, LAI = data_flx$LAI,
-                        ppfd = data_flx$PPFD, u=data_flx$WS, ustar = data_flx$Ustar, 
+                        ppfd = data_flx$PPFD, u=data_flx$WS, ustar = NA,# data_flx$Ustar, 
                         canopy_height = data_flx$Hc, patm =data_flx$PA*1000, 
-                        elv = data_flx$elev, z = data_flx$z, d = 0.001, 
-                        netrad = data_flx$NETRAD,
+                        elv = data_flx$elev, z = data_flx$z, leafwidth = 0.0001, 
+                        netrad = NA, #data_flx$NETRAD,
                         beta = 146.0, c_cost = 0.41, 
-                        do_leaftemp = TRUE,  gb_method = "Su_2001",
+                        do_leaftemp = TRUE,  gb_method = "Choudhury_1988",
                         do_acclimation = TRUE, 
                         upscaling_method = "noon", hour_reference_T = c(10,12,14), 
                         acclim_days = 15, weighted_accl = TRUE,
                         energy_params = list(
-                          epsleaf = 0.9858975, #thermal absorptivity of the leaf
+                          epsleaf = 0.96, #thermal absorptivity of the leaf
                           ste_bolz = 5.67e-8, #W m^-2 K^-4
                           cpm = 75.38, #J mol^-1 ºC-1
                           J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -106,8 +107,9 @@ res2 <- rpmodel_subdaily(TIMESTAMP = data_flx$DateTime, tc = data_flx$Tair, vpd 
                          co2 = data_flx$CO2,fapar = data_flx$FAPAR, LAI = data_flx$LAI,
                         ppfd = data_flx$PPFD, u=data_flx$WS, ustar = NA, 
                         canopy_height = data_flx$Hc, patm =data_flx$PA*1000, 
-                        elv = data_flx$elev, z = data_flx$z, d = 0.1,
-                        netrad = data_flx$NETRAD, beta = 146.0, c_cost = 0.41,
+                        elv = data_flx$elev, z = data_flx$z, leafwidth = 0.01,
+                        netrad = NA,#data_flx$NETRAD, 
+                        beta = 146.0, c_cost = 0.41,
                         do_leaftemp = FALSE,  gb_method = "Su_2001",
                         do_acclimation = TRUE, 
                         upscaling_method = "noon", hour_reference_T = c(10,12,14), 
@@ -134,7 +136,7 @@ res4 <- rpmodel_subdaily(TIMESTAMP = data_flx$DateTime, tc = data_flx$Tcan, vpd 
                          co2 = data_flx$CO2,fapar = data_flx$FAPAR, LAI = data_flx$LAI,
                          ppfd = data_flx$PPFD, u=data_flx$WS, ustar = data_flx$Ustar, 
                          canopy_height = data_flx$Hc, patm =data_flx$PA*1000, 
-                         elv = data_flx$elev, z = data_flx$z, d = 0.1, 
+                         elv = data_flx$elev, z = data_flx$z, leafwidth = 0.1, 
                          netrad = data_flx$NETRAD, beta = 146.0, c_cost = 0.41, 
                          do_leaftemp = FALSE,  gb_method = "Su_2001",
                          do_acclimation = TRUE, 
@@ -152,7 +154,7 @@ res4 <- rpmodel_subdaily(TIMESTAMP = data_flx$DateTime, tc = data_flx$Tcan, vpd 
 df_res4 <- as_tibble(res4) %>% cbind(data_flx)%>% filter(res$Q_tcleaf == 1)
 
 # range_plot <- c(43090:43300)
-range_plot <- c(2090:2300)
+range_plot <- c(2000:2200)
 dateRanges <- data.frame(
   start = lubridate::as_date(df_res$DateTime) %>% lubridate::as_datetime() + 18*60*60,
   end   = lubridate::as_date(df_res$DateTime) %>% lubridate::as_datetime() + 30*60*60 )%>%
@@ -317,9 +319,8 @@ df_res %>%
   # geom_ribbon(aes(timestamp,ymin=T_CANOPY - T_CANOPYsd, ymax=T_CANOPY + T_CANOPYsd),alpha = 0.2)+
   geom_line(aes(DateTime,Tair), color = "red")+
   geom_line(aes(DateTime,tcleaf), color = "blue")+
-  geom_line(data = df_res %>%
-              slice(range_plot),
-            mapping = aes(DateTime,vpd_leaf/100), color = "black")+
+  # geom_line(mapping = aes(DateTime,tcleaf_dew), color = "black")+
+  # geom_line(mapping = aes(DateTime,Ustar*10), color = "orange")+
   geom_rect(data = dateRanges, mapping = aes(xmin= start , xmax=end,ymin=-Inf,ymax=Inf), alpha=0.1, fill="black")+
   # geom_line(aes(DateTime,WS))+
   # geom_line(aes(DateTime,H*0.1))+
@@ -380,7 +381,7 @@ ggplot() +
 
 df_res %>% 
   filter(!is.na(GPP)) %>% 
-  filter(PPFD>25) %>%
+  filter(SW_IN>25) %>%
   mutate(dens = get_density(assim,GPP, n = 100)) %>%
   ggplot(aes(assim,GPP, color =dens))+
   geom_point()+
@@ -390,7 +391,7 @@ df_res %>%
 
 df_res2 %>% 
   filter(!is.na(GPP))%>%
-  filter(PPFD>25) %>%
+  filter(SW_IN>25) %>%
   mutate(dens = get_density(assim,GPP, n = 100)) %>%
   ggplot(aes(assim,GPP, color =dens))+
   geom_point()+
@@ -400,7 +401,7 @@ df_res2 %>%
 
 df_res4 %>% 
   filter(!is.na(GPP),!is.na(assim))%>% 
-  filter(PPFD>25) %>%
+  filter(SW_IN>25) %>%
   mutate(dens = get_density(assim,GPP, n = 100)) %>%
   ggplot(aes(assim,GPP, color =dens))+
   geom_point()+
@@ -408,18 +409,33 @@ df_res4 %>%
   geom_smooth(method = "lm", color = "grey20", linetype = 2,alpha=0.1)+
   scale_color_viridis_c(option = "C")
 
-lm(GPP~assim,
-   data = df_res %>% filter(SW_IN>25)
-   ) %>% summary()
 
-lm(GPP~assim,
-   data = df_res2 %>% filter(SW_IN>25)
-   ) %>% summary()
+mod1 <- lm(GPP~assim,
+           data = df_res %>% filter(SW_IN>25)
+) 
+summary(mod1)
+rmse(df_res%>% 
+       filter(SW_IN>25) %>% 
+       dplyr::select(GPP) %>% 
+       as.matrix(), predict(mod1))
 
-lm(GPP~assim,
-   data = df_res4 %>% filter(SW_IN>25)
-) %>% summary()
+mod2 <- lm(GPP~assim,
+           data = df_res2 %>% filter(SW_IN>25)
+)
+summary(mod2)
+rmse(df_res%>% 
+       filter(SW_IN>25) %>% 
+       dplyr::select(GPP) %>% 
+       as.matrix(), predict(mod2))
 
+mod3 <- lm(GPP~assim,
+           data = df_res4 %>% filter(SW_IN>25)
+)
+summary(mod3)
+rmse(df_res%>% 
+       filter(SW_IN>25) %>% 
+       dplyr::select(GPP) %>% 
+       as.matrix(), predict(mod3))
 #TLEAF
 # 
 # df_res %>% mutate(
@@ -472,6 +488,7 @@ df_res %>%
   scale_color_viridis_c(option = "C")
 
 df_res %>%
+  # filter(tcleaf !=tcleaf_dew) %>% 
   # filter(PPFD>25) %>% 
   mutate(dens = get_density(Tcan,tcleaf, n = 100)) %>%
   ggplot(aes(tcleaf,Tcan, color =dens))+
@@ -487,12 +504,16 @@ df_res %>%
   geom_abline(intercept=0,slope=1)+
   scale_color_viridis_c(option = "C")
 
-lm(Tcan~tcleaf,data = df_res# %>% filter(SW_IN>25)
-     ) %>% 
-  summary()
+mod1 <- lm(Tcan~tcleaf,data = df_res %>% filter(tcleaf !=tcleaf_dew)
+     ) 
+summary(mod1)
 
-lm(Tcan~Tair,data = df_res #%>%filter(SW_IN>25)
-   ) %>% summary()
+rmse(df_res$Tcan, predict(mod1))
+
+mod2 <- lm(Tcan~Tair,data = df_res #%>%filter(SW_IN>25)
+   )
+summary(mod2)
+rmse(df_res$Tcan, predict(mod2))
 
 
 ### H

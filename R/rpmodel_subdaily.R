@@ -353,7 +353,7 @@ rpmodel_subdaily <- function(
   if(!do_acclimation){
     print("No acclimation was calculated")
     return(df_Or)
-  }else{
+  }else{ 
   
   
     # 2.0 Create df for upscaling
@@ -714,41 +714,41 @@ dailyUpscaling <- function(df = dfIn, nrWindow = 1, hour_reference_T = c(10,12,1
 #' @param showMsg Logical. If TRUE, it shows the function messages. Defaults to \code{FALSE}.
 #' @return TRUE or FALSE. 
 
-# headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck,showMsg = F) {
-#   
-#   # string of mandatory variables, missing
-#   errorColMissing = c()
-#   
-#   # string of mandatory variables, duplicate
-#   errorColMultiple = c()
-#   
-#   for (col in colMandatory){
-#     ckMandatory = which(colnames(df) == col)
-#     if (length(ckMandatory) == 0) {
-#       errorColMissing = c(errorColMissing,col)
-#       next
-#     }
-#     if (length(ckMandatory) > 1) {
-#       errorColMultiple = c(errorColMultiple,col)
-#       next
-#     }
-#   }
-#   rm(col)
-#   if (showMsg) {
-#     cat(sprintf('missing mandatory variables: %d \n',length(errorColMissing)))   
-#     if (length(errorColMissing) > 0)
-#       cat(sprintf(' (%s)\n',paste(errorColMissing,collapse = ',')))
-#     
-#     cat(sprintf('multiple mandatory variables: %d \n',length(errorColMultiple)))
-#     if (length(errorColMultiple) > 0)
-#       cat(sprintf(' (%s)\n',paste(errorColMultiple,collapse = ',')))
-#   }
-#   if ( (length(errorColMissing) + length(errorColMultiple)) > 0) {
-#     return(FALSE)
-#   } else {
-#     return(TRUE)
-#   }
-# }
+headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck,showMsg = F) {
+
+  # string of mandatory variables, missing
+  errorColMissing = c()
+
+  # string of mandatory variables, duplicate
+  errorColMultiple = c()
+
+  for (col in colMandatory){
+    ckMandatory = which(colnames(df) == col)
+    if (length(ckMandatory) == 0) {
+      errorColMissing = c(errorColMissing,col)
+      next
+    }
+    if (length(ckMandatory) > 1) {
+      errorColMultiple = c(errorColMultiple,col)
+      next
+    }
+  }
+  rm(col)
+  if (showMsg) {
+    cat(sprintf('missing mandatory variables: %d \n',length(errorColMissing)))
+    if (length(errorColMissing) > 0)
+      cat(sprintf(' (%s)\n',paste(errorColMissing,collapse = ',')))
+
+    cat(sprintf('multiple mandatory variables: %d \n',length(errorColMultiple)))
+    if (length(errorColMultiple) > 0)
+      cat(sprintf(' (%s)\n',paste(errorColMultiple,collapse = ',')))
+  }
+  if ( (length(errorColMissing) + length(errorColMultiple)) > 0) {
+    return(FALSE)
+  } else {
+    return(TRUE)
+  }
+}
 
 
 
@@ -1075,11 +1075,12 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
   #Latent Heat Loss calculation
     if(is.na(df_res$gs)){df_res$gs = 0}
     if(length(df_res$gs) == 0){df_res$gs = 0}
-    if(is.infinite(df_res$gs)){df_res$gs = 100} 
+    if(is.infinite(df_res$gs)&df_res$gs>0){df_res$gs = 100} 
+    if(is.infinite(df_res$gs)&df_res$gs<0){df_res$gs = 0}
     gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
   
     if(is.na(ustar)){
-      ust <- calc_ustar(u,canopy_height,z,LAI)
+      ust <- calc_ustar(u, canopy_height, z, LAI)
     }else{
       ust <- ustar
     }
@@ -1087,9 +1088,9 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
   # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
 
     gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
-                 tc,z,LAI, patm,mol_gas_const,tk,gb_method,leafwidth) 
-    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+                 tc, z, LAI, patm,mol_gas_const, rho, tk, gb_method, leafwidth) 
     gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
+    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
     gbs = gs * gb/(gs + gb)
   
     E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
@@ -1106,14 +1107,14 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
     Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
     
   #Thermal Infra-Red Losses
-    # Qtirleaf = epsleaf*sigma*tkleaf^4
-    Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+    Qtirleaf = epsleaf*sigma*tkleaf^4
+    # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
     # Qtirleaf = epsleaf*epssky*sigma*tkleaf^4
     
     Rnet = Qsw + Qtir - Qtirleaf
 
   #Convective Heat Exchange
-    Qc = gbh*rho*CP*(tcleaf_root-tc)
+    Qc = gbh*cpm*(tcleaf_root-tc)
   
   
   return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))
