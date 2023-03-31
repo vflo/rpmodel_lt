@@ -180,9 +180,14 @@ fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/WR.RData")
 names(WR)
 foo <- WR %>% 
+  rowwise() %>% 
   mutate(Tcan = Tcan_Avg_corr,
-         DateTime = (lubridate::ymd_hms(date)- lubridate::hours(8)) %>% force_tz(tzone = "UTC")) %>% 
-  dplyr::select(DateTime,Tcan)
+         Tcan_sd = sd(c_across(c(Tcan_S0,Tcan_S1,Tcan_S2,Tcan_S3,Tcan_S4,Tcan_S5,
+                      Tcan_S6,Tcan_S7,Tcan_S8,Tcan_S9)),na.rm=TRUE)
+         ) %>% 
+  ungroup() %>% 
+  mutate(DateTime = (lubridate::ymd_hms(date)%>% force_tz(tzone = "UTC") - lubridate::hours(8)) ) %>% 
+  dplyr::select(DateTime,Tcan,Tcan_sd)
 fluxnet_data <- fluxnet_data %>% 
   dplyr::select(-Tcan) %>% 
   left_join(foo)

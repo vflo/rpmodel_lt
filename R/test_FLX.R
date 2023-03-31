@@ -100,7 +100,7 @@ res_BE <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$Tair, v
                         upscaling_method = "noon", hour_reference_T = c(10,12,14), 
                         acclim_days = 15, weighted_accl = TRUE,
                         energy_params = list(
-                          epsleaf = 0.96, #thermal absorptivity of the leaf
+                          epsleaf = 0.9738, #thermal absorptivity of the leaf
                           ste_bolz = 5.67e-8, #W m^-2 K^-4
                           cpm = 75.38, #J mol^-1 ºC-1
                           J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -282,7 +282,7 @@ res_CH <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$Tair, v
                            upscaling_method = "noon", hour_reference_T = c(10,12,14), 
                            acclim_days = 15, weighted_accl = TRUE,
                            energy_params = list(
-                             epsleaf = 0.96, #thermal absorptivity of the leaf
+                             epsleaf = 0.9766, #thermal absorptivity of the leaf
                              ste_bolz = 5.67e-8, #W m^-2 K^-4
                              cpm = 75.38, #J mol^-1 ºC-1
                              J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -383,15 +383,16 @@ plot.eval.dens(df_res_CH$assim,df_res_CH$GPP_DT_CUT_REF)
 plot.eval.dens(df_res2_CH$assim,df_res2_CH$GPP_DT_CUT_REF)
 
 #H
-plot.eval.dens(df_res_CH$Qc,df_res_CH$H_F_MDS)
+df_res_CH_filter <- df_res_CH %>% filter(LAI>1)
+plot.eval.dens(df_res_CH_filter$Qc,df_res_CH_filter$H_F_MDS)
 
 #NETRAD
 
 
 #LE
-df_res_CH_filter <- df_res_CH %>% filter(SW_IN_F>25)
+df_res_CH_filter <- df_res_CH %>% filter(SW_IN_F>25,LAI>3)
 plot.eval.dens(df_res_CH_filter$e*18.01528*2230*1e-6,df_res_CH_filter$LE_F_MDS)
-df_res2_CH_filter <- df_res2_CH %>% filter(SW_IN_F>25)
+df_res2_CH_filter <- df_res2_CH %>% filter(SW_IN_F>25,LAI>3)
 plot.eval.dens(df_res2_CH_filter$e*18.01528*2230*1e-6,df_res2_CH_filter$LE_F_MDS)
 
 
@@ -474,7 +475,7 @@ res_FI <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$Tair, v
                            upscaling_method = "noon", hour_reference_T = c(10,12,14), 
                            acclim_days = 15, weighted_accl = TRUE,
                            energy_params = list(
-                             epsleaf = 0.96, #thermal absorptivity of the leaf
+                             epsleaf = 0.971, #thermal absorptivity of the leaf
                              ste_bolz = 5.67e-8, #W m^-2 K^-4
                              cpm = 75.38, #J mol^-1 ºC-1
                              J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -663,7 +664,7 @@ res_GF <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$Tair, v
                            upscaling_method = "noon", hour_reference_T = c(10,12,14), 
                            acclim_days = 15, weighted_accl = TRUE,
                            energy_params = list(
-                             epsleaf = 0.96, #thermal absorptivity of the leaf
+                             epsleaf = 0.948, #thermal absorptivity of the leaf
                              ste_bolz = 5.67e-8, #W m^-2 K^-4
                              cpm = 75.38, #J mol^-1 ºC-1
                              J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -850,7 +851,7 @@ res_US <- rpmodel_subdaily(TIMESTAMP = data_flx$timestamp, tc = data_flx$Tair, v
                            upscaling_method = "noon", hour_reference_T = c(10,12,14), 
                            acclim_days = 15, weighted_accl = TRUE,
                            energy_params = list(
-                             epsleaf = 0.96, #thermal absorptivity of the leaf
+                             epsleaf = 0.9676, #thermal absorptivity of the leaf
                              ste_bolz = 5.67e-8, #W m^-2 K^-4
                              cpm = 75.38, #J mol^-1 ºC-1
                              J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
