@@ -218,9 +218,10 @@ fapar <- fapar %>%
   }) %>% bind_rows()
 
 
-# env_df <- env_df %>% left_join(fapar)
 
-emi <- read_csv("R/data/EMISSIVITY_values.csv")%>% 
+
+#### EMISSIVITY ####
+emi <- read_csv("R/data/EMISSIVITY_values.csv") %>% 
   dplyr::select(-c(`system:index`,.geo)) %>% 
   mutate(si_long = as.numeric(si_long),
          si_lat = as.numeric(si_lat),
@@ -263,3 +264,38 @@ emi <- emi %>%
 
     z
   }) %>% bind_rows()
+
+
+
+
+#### VEGETATION HEIGHT ####
+veg_height <- read_csv("R/data/veg_height.csv") 
+
+veg_height_coord <- veg_height %>% dplyr::select(si_lat, si_long) %>% distinct()
+
+veg_height_coord <- dist_merge_mod(sites%>% rename(si_lat = lat,si_long = lon), 
+                            veg_height_coord, 'si_long', 'si_lat', 'si_long', 'si_lat')
+
+veg_height <- veg_height %>% 
+  left_join(veg_height_coord %>% 
+              dplyr::select(Site,y_lat, y_long) %>%
+              rename(si_lat = y_lat,
+                     si_long = y_long)) %>% 
+  distinct() %>% 
+  mutate(veg_height = case_when(is.na(mean)~1,
+                                TRUE~`mean`)) %>% 
+  dplyr::select(-mean)
+
+
+
+
+#### CO2 ####
+co2 <- read_csv("R/data/co2_mm_mlo.csv", 
+                   skip = 56)
+
+
+
+
+
+
+# env_df <- env_df %>% left_join(fapar)
