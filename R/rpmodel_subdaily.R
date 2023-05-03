@@ -455,7 +455,6 @@ rpmodel_subdaily <- function(
           # Td = (243.5 * log(ea/es) + (17.67 * x$tc)/(x$tc + 243.5)) / 
           #   (17.67 - log(ea/es) - (17.67 * x$tc)/(x$tc + 243.5))
           # tcleaf = x$tc
-          # tcleaf_new = tcleaf+1
           # "2015-05-09 01:00:00 UTC"
           #################################################
           tcleaf_new <- optimise(function(tcleaf_root){
@@ -876,15 +875,15 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   
   # 2. INSTANTANEOUS Vcmax and Jmax----
   # The Arrhenius equation constants:
-  Ha = 65330# [J mol-1]
-  Haj = 43900
-  Rgas = 8.314 # [J mol-1 K-1]
+  # Ha = 65330# [J mol-1]
+  # Haj = 43900
+  # Rgas = 8.314 # [J mol-1 K-1]
+  # vcmaxAdjusted = vcmax_opt * exp((Ha/Rgas)*(1/tkleaf_opt - 1/tkleaf))
+  # jmaxAdjusted = jmax_opt * exp((Haj/Rgas)*(1/tkleaf_opt - 1/tkleaf))
+  # rm(Rgas,Ha,Haj)
   
-  
-  vcmaxAdjusted = vcmax_opt * exp((Ha/Rgas)*(1/tkleaf_opt - 1/tkleaf))
-  jmaxAdjusted = jmax_opt * exp((Haj/Rgas)*(1/tkleaf_opt - 1/tkleaf))
-  
-  rm(Rgas,Ha,Haj)
+  vcmaxAdjusted = vcmax_opt * ftemp_inst_vcmax(tcleaf, tcleaf_opt)
+  jmaxAdjusted = jmax_opt * ftemp_inst_jmax(tcleaf, tcleaf_opt)
   
   
   # 3. instantaneous (with acclimated xiPa, and adjusted with the actual VPD)

@@ -33,6 +33,12 @@ part_nee<-function(filename,lat,lon,outpath=getwd(),start_q = NA, end_q = NA, dt
 	    mutate(NEE_f = coalesce(NEE_f,get(grep("FC", names(fluxnet_data), value = TRUE)[1])))
 	}
 	
+	#add storage flux
+	if(length(grep("SC", names(fluxnet_data), value = TRUE))>=1){
+	  namec<-grep("SC", names(fluxnet_data), value = TRUE)[1]
+	  fluxnet_data$NEE_f<-fluxnet_data$NEE_f+fluxnet_data[,..namec]
+	}
+	
 	
 	##### correct the names
 	if(length(grep("^PPFD_IN_PI", names(fluxnet_data), value = TRUE))>0){

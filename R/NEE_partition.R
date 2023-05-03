@@ -7,7 +7,7 @@ kalb_vis <- 0.03    # visible light albedo (Sellers, 1985)
 kfFEC <- 2.04       # from-flux-to-energy, umol/J (Meek et al., 1984)
 #### read the files' paths ####
 filenames.fluxnet<- list.files(path="R/data/original_sites", "*.csv$", full.names=TRUE,recursive = TRUE)
-filename <- filenames.fluxnet[13]
+filename <- filenames.fluxnet[14]
 fluxnet_data<-data.table::fread(filename ,  header=T, quote="\"", sep=",",na.strings = "-9999",integer64="character")
 ind <- strptime(fluxnet_data$TIMESTAMP_START, format = "%Y%m%d%H%M",
                 tz = "GMT") %>% as.POSIXct()
@@ -24,8 +24,8 @@ sites_metadata <- read_delim("R/data/sites_metadata.csv",
 #Sites where the nee partition failed:
 #"CR-SoC" "PR-xGU" "US-xSP" "US-xTE"
 #### Estimate partition ####
-purrr::map2(.x=as.list(filenames.fluxnet)[3],
-            .y=sites_metadata[3,]%>%
+purrr::map2(.x=as.list(filenames.fluxnet)[31],
+            .y=sites_metadata[31,]%>%
               split(seq(nrow(.))),
             .f=function(x = .x, y=.y){
               site <- do.call(rbind, strsplit(basename(x), "_"))[,2]
@@ -45,7 +45,7 @@ purrr::map2(.x=as.list(filenames.fluxnet)[3],
 #### Obtain final database ####
 filenames_fluxnet <- list.files(path="R/data/sites", "*.csv$", full.names=TRUE,recursive = TRUE)
 filenames_fluxnet_name <- list.files(path="R/data/sites", "*.csv$", full.names=FALSE,recursive = TRUE)
-index <- 12
+index <- 29
 purrr::map(as.list(c(10,12,13,29)),function(index){
   filename <- filenames_fluxnet[index]
   filename_name <- filenames_fluxnet_name[index]
@@ -134,9 +134,12 @@ load(file="R/data/HF.RData")
 names(HF)
 foo <- HF %>% 
   mutate(Tcan = rowMeans(dplyr::select(.,ACRU_mean, BEPA_mean, PIST_mean, QURU_mean), na.rm = TRUE),
-         DateTime = (date - lubridate::hours(8)-minutes(30) ) %>% force_tz(tzone = "UTC")
+         DateTime = (date - lubridate::hours(9)-minutes(30) ) %>% 
+           force_tz(tzone = "UTC"),
+         ta = Tair
          ) %>% 
-  dplyr::select(DateTime,Tcan,ACRU_mean, BEPA_mean, PIST_mean, QURU_mean)
+  dplyr::select(DateTime,Tcan,ACRU_mean, BEPA_mean, PIST_mean, 
+                QURU_mean)
 fluxnet_data <- fluxnet_data %>% 
   dplyr::select(-Tcan) %>% 
   left_join(foo )
@@ -149,12 +152,13 @@ fluxnet_data<-data.table::fread(filename,  header=T, quote="\"", sep=",")
 load(file="R/data/MR.RData")
 names(MR)
 foo <- MR %>% 
-  mutate(Tcan = Tcan_Avg_corr,2,
-         DateTime = (date - lubridate::minutes(15))%>% force_tz(tzone = "UTC")) %>% 
-  dplyr::select(DateTime,Tcan)
+  mutate(Tcan = Tcan_Avg_corr,
+         DateTime = (date - lubridate::minutes(15))%>% force_tz(tzone = "UTC"),
+         ta = Tair) %>% 
+  dplyr::select(DateTime,Tcan,GPP)
 fluxnet_data <- fluxnet_data %>% 
   mutate(DateTime = DateTime) %>% 
-  dplyr::select(-Tcan) %>% 
+  dplyr::select(-Tcan,-GPP) %>% 
   left_join(foo)
 write.csv(fluxnet_data, filename, row.names=FALSE)
 
@@ -166,7 +170,9 @@ load(file="R/data/NW.Rdata")
 names(NW)
 foo <- NW %>% 
   mutate(Tcan = Tcan,
-         DateTime = (lubridate::ymd_hms(date)+ lubridate::hours(9) - lubridate::minutes(15)) %>% force_tz(tzone = "UTC")) %>% 
+         DateTime = (lubridate::ymd_hms(date)+ lubridate::hours(8) - 
+                       lubridate::minutes(15)) %>% force_tz(tzone = "UTC"),
+         ta = Tair) %>% 
   dplyr::select(DateTime,Tcan)
 fluxnet_data <- fluxnet_data %>% 
   dplyr::select(-Tcan) %>% 
@@ -183,13 +189,15 @@ foo <- WR %>%
   rowwise() %>% 
   mutate(Tcan = Tcan_Avg_corr,
          Tcan_sd = sd(c_across(c(Tcan_S0,Tcan_S1,Tcan_S2,Tcan_S3,Tcan_S4,Tcan_S5,
-                      Tcan_S6,Tcan_S7,Tcan_S8,Tcan_S9)),na.rm=TRUE)
+                      Tcan_S6,Tcan_S7,Tcan_S8,Tcan_S9)),na.rm=TRUE),
+         ta = TA
          ) %>% 
   ungroup() %>% 
-  mutate(DateTime = (lubridate::ymd_hms(date)%>% force_tz(tzone = "UTC") - lubridate::hours(8)) ) %>% 
-  dplyr::select(DateTime,Tcan,Tcan_sd)
+  mutate(DateTime = (lubridate::ymd_hms(date)%>% force_tz(tzone = "UTC") - 
+                       lubridate::hours(9)) ) %>% 
+  dplyr::select(DateTime,Tcan,Tcan_sd,GPP,GPP_DT)
 fluxnet_data <- fluxnet_data %>% 
-  dplyr::select(-Tcan) %>% 
+  dplyr::select(-Tcan,-GPP) %>% 
   left_join(foo)
 write.csv(fluxnet_data, filename, row.names=FALSE)
 
