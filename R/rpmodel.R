@@ -33,8 +33,8 @@ rpmodel <- function(
     do_soilmstress = FALSE,
     do_leaftemp = FALSE,
     gb_method = "Su_2001",
+    epsleaf = 0.96, #thermal absorptivity of the leaf
     energy_params = list(
-      epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
       cpm = 75.38, #J mol^-1 ºC-1
       kalb_vis = 0.3, # visible albedo
@@ -102,6 +102,7 @@ rpmodel <- function(
       do_soilmstress = do_soilmstress,
       do_leaftemp = do_leaftemp,
       gb_method = gb_method,
+      epsleaf = epsleaf,
       energy_params = energy_params,
       returnvar = returnvar,
       verbose = verbose)
@@ -147,8 +148,8 @@ rpmodel_lt <- function(
     do_soilmstress = FALSE,
     do_leaftemp = FALSE,
     gb_method = "Su_2001",
+    epsleaf = 0.96, #thermal absorptivity of the leaf
     energy_params = list(
-      epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
       cpm = 75.38, #J mol^-1 ºC-1
       J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -159,7 +160,7 @@ rpmodel_lt <- function(
     verbose = FALSE){
   
   #parameters
-  epsleaf = energy_params["epsleaf"] %>% as.numeric
+  # epsleaf = energy_params["epsleaf"] %>% as.numeric
   sigma = energy_params["ste_bolz"]%>% as.numeric
   cpm = energy_params["cpm"]%>% as.numeric #molar heat capacity of water 
   # kfFEC = energy_params["kfFEC"]%>% as.numeric

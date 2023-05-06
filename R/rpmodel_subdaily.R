@@ -274,9 +274,8 @@ rpmodel_subdaily <- function(
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, meanalpha = 1.0, apar_soilm = 0.0, bpar_soilm = 0.73300,
     c4 = FALSE, method_jmaxlim = "wang17",do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
-    do_leaftemp = FALSE, gb_method = "Su_2001", do_acclimation = FALSE,
+    do_leaftemp = FALSE, gb_method = "Su_2001", do_acclimation = FALSE, epsleaf = 0.96, #thermal absorptivity of the leaf
     energy_params = list(
-      epsleaf = 0.96, #thermal absorptivity of the leaf
       ste_bolz = 5.67e-8, #W m^-2 K^-4
       cpm = 75.38, #J mol^-1 ºC-1
       J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
@@ -295,7 +294,7 @@ rpmodel_subdaily <- function(
   rd_to_vcmax <- 0.015  # Ratio of Rdark to Vcmax25, number from Atkin et al., 2015 for C3 herbaceous
   
   #parameters
-  epsleaf = energy_params["epsleaf"] %>% as.numeric
+  # epsleaf = energy_params["epsleaf"] %>% as.numeric
   sigma = energy_params["ste_bolz"]%>% as.numeric
   cpm = energy_params["cpm"]%>% as.numeric #molar heat capacity of water 
   # kfFEC = energy_params["kfFEC"]%>% as.numeric
@@ -344,14 +343,15 @@ rpmodel_subdaily <- function(
   rpmodel(tc, vpd, co2, fapar, LAI,
           ppfd, u, ustar, canopy_height, sw_in, patm, 
           elv, z, leafwidth, netrad, kphio, beta, c_cost,
-          soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
+          soilm, meanalpha, apar_soilm, bpar_soilm, c4,
           method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
-          gb_method = gb_method, verbose = verbose, energy_params = energy_params)%>% 
+          gb_method = gb_method, epsleaf = epsleaf,
+          energy_params = energy_params, verbose = verbose)%>% 
     as_tibble()-> df_Or
   
   #DO ACCLIMATION?
   if(!do_acclimation){
-    print("No acclimation was calculated")
+    # print("No acclimation was calculated")
     return(df_Or)
   }else{ 
   
@@ -374,7 +374,8 @@ rpmodel_subdaily <- function(
                    netrad = netrad,
                    LAI = LAI,
                    canopy_height = canopy_height,
-                   patm = patm)
+                   patm = patm,
+                   epsleaf = epsleaf)
     
     # 2.1 apply the dailyUpscaling function 
     dataDaily <- dailyUpscaling(df = dfIn, 
@@ -400,14 +401,14 @@ rpmodel_subdaily <- function(
     tibble(dataDaily) %>% 
       split(seq(nrow(.))) %>%
       purrr::map_df(function(x){
-        print(paste("acclimation of", x$TIMESTAMP))
+        # print(paste("acclimation of", x$TIMESTAMP))
         res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
                        x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
                        unique(elv), unique(z), leafwidth, x$netrad, kphio, beta, c_cost,
                        soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
                        method_jmaxlim, do_ftemp_kphio, do_soilmstress, 
                        do_leaftemp = do_leaftemp, gb_method = gb_method, 
-                       verbose = verbose, energy_params = energy_params)%>% 
+                       verbose = verbose, epsleaf=x$epsleaf, energy_params = energy_params)%>% 
           as_tibble()
         return(res)
       }) -> df_Mm
@@ -445,7 +446,7 @@ rpmodel_subdaily <- function(
       split(seq(nrow(.))) %>%
       purrr::map_df(function(x){
         tryCatch({
-          print(x$TIMESTAMP)
+          # print(x$TIMESTAMP)
           rho <- calc_air_density(x$patm, x$tc)  # air density (kg m-3)
           es = exp(34.494-4924.99/(x$tc+237.1))/((x$tc+105)^1.57)
           ea = es - x$vpd
@@ -481,7 +482,7 @@ rpmodel_subdaily <- function(
                                  mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                  lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                  sigma = sigma, cpm = cpm, CP = CP, rho = rho,
-                                 epsleaf = epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
+                                 epsleaf = x$epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
                                  fanir = fanir, ei = ei, ea = ea, gb_method = gb_method, 
                                  leafwidth = leafwidth)
             if(is.na(x$netrad)){
@@ -516,7 +517,7 @@ rpmodel_subdaily <- function(
                                mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                sigma = sigma, cpm = cpm, CP = CP, rho = rho,
-                               epsleaf = epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
+                               epsleaf = x$epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
                                fanir = fanir, ei = ei, ea = ea,  gb_method = gb_method,
                                leafwidth = leafwidth)
           
@@ -550,7 +551,7 @@ rpmodel_subdaily <- function(
                               xi = DF$xi, xiPa = DF$xiPa, patm = DF$patm, ns_star_opt = DF$ns_star_opt, 
                               gammastar = DF$gammastar, gammastar_opt = DF$gammastar_opt, kmm = DF$kmm, kmm_opt = DF$kmm_opt,
                               kphio = kphio, soilmstress = soilmstress, method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax,
-                              beta = beta, c_cost = c_cost)
+                              beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI)
     
     
     if(do_leaftemp){
@@ -833,7 +834,7 @@ headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck
 
 rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xi, xiPa, patm, ns_star_opt,
                                gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim, c4,
-                               rd_to_vcmax, beta, c_cost){
+                               rd_to_vcmax, beta, c_cost, leafwidth, LAI){
   #---- Fixed parameters--------------------------------------------------------
   c_molmass <- 12.0107  # molecular mass of carbon (g)
   #'
@@ -1023,7 +1024,11 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   gs <- assim/(ca - ci_inst)
   e <- 1.6*gs*vpd
   
-  ## 10.0 construct list for output
+  ## 10.0 calculate frost and heat cost ####
+  #Based in Villar y Merino - 2001 - Comparison of leaf construction costs in woody spe
+  assim <- mapply(calculate_assimilation_lethal, leafwidth, tcleaf, LAI, assim)
+  
+  ## 11.0 construct list for output
   out <- list(
     gpp             = gpp,   # remove this again later
     assim           = assim,
@@ -1069,7 +1074,7 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                                gammastar = gammastar, gammastar_opt = gammastar_opt, kmm = kmm, 
                                kmm_opt = kmm_opt, kphio = kphio, soilmstress = soilmstress, 
                                method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                               beta = beta, c_cost = c_cost)
+                               beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI)
   
   #Latent Heat Loss calculation
     if(is.na(df_res$gs)){df_res$gs = 0}
@@ -1117,4 +1122,47 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
   
   
   return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))
+}
+
+
+
+# Define a function that takes leaf width, LAI, assimilation and leaf temperature 
+# as inputs and calculates the C cost to replace all the canopy if some temperature 
+#thresholds are over-passed
+calculate_assimilation_lethal <- function(leafwidth, tcleaf, LAI, assim){
+  # Limit lethal temperatures as in Wright et al. 2017
+  lethal_temp <- (tcleaf < -5 | tcleaf > 50)
+
+  # Calculate assimilation
+  if(lethal_temp){
+    
+    # Calculate leaf size approximation as from Wright et al. 2017
+    leaf_size <- 1.5 * leafwidth^2 
+    
+    # Calculate g glucose cost per gram of leaf
+    # x=c(-2.5,4.483372921615201)
+    # y=c(1.7352342158859466,1.2953156822810588)
+    # lm(y~x)
+    y_g_g <- 1.578 - 0.063 * log(leaf_size)
+    
+    # Calculate SLA from leaf size
+    # x=c(-2.5,4.4654549975989575)
+    # y=c(1.6124031007751967,17.240310077519382)
+    # lm(y~x)
+    y_m2_kg <- 7.221 - 2.244 * log(leaf_size) #in m2 Kg-1
+    y_m2_g <- y_m2_kg / 1000 #in m2 g-1
+    
+    # Convert cost from gram glucose to moles glucose 
+    g_glucose_per_to_mole <- 180 #1 mole of glucose weighs 180 g
+    mole_glucose_per_mole_C <- 6 #1 mole of glucose contains 6 moles of C
+    mole_C_m2 <- y_g_g / y_m2_g / g_glucose_per_to_mole * mole_glucose_per_mole_C
+    
+    # Calculate total cost
+    total_C_cost <- mole_C_m2 * LAI * 1e6 # micromole C
+    
+    assim <- assim - total_C_cost
+  }
+  
+  # Return the assimilation value
+  return(assim)
 }
