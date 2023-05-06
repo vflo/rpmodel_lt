@@ -14,52 +14,48 @@ library("rnaturalearthdata")
 
 #### FUNCTIONS ####
 
-
-calc_dew_t <- function(t,rh){
-  if(t<0){
-    #Buck, Arden L. 1981. New Equations for Computing Vapor Pressure and Enhancement Factor"
+# This function calculates the dew point temperature from air temperature and relative humidity
+# using the Buck- Arden L. equation for vapor pressure and enhancement factor.
+calc_dew_t <- function(t, rh){
+  ifelse(t<0, {
     b = 17.966
-    c=247.15
-  }else{
+    c = 247.15
+  }, {
     b = 17.368
     c = 238.88
-  }
+  })
   d = 234.5
   p = exp((b-t/d)*(t/(c+t)))
   c*log(rh/100*p)/(b-log(rh/100*p))
 }
 
-calc_rh <- function(t,td){
-  if(t<0){
-    #Buck, Arden L. 1981. New Equations for Computing Vapor Pressure and Enhancement Factor"
-    b = 17.966
-    c=247.15
-  }else{
-    b = 17.368
-    c = 238.88
-  }
-  d = 234.5
-  100*exp((b*c*(td-t)/(c+td)+t^2/d)/(c+t))
+# This function calculates the relative humidity from air temperature and dew point temperature
+# using the Buck- Arden L. equation.
+calc_rh <- function(t, td) {
+  b <- ifelse(t < 0, 17.966, 17.368)
+  c <- ifelse(t < 0, 247.15, 238.88)
+  d <- 234.5
+  100 * exp((b * c * (td - t) / (c + td) + t^2 / d) / (c + t))
 }
 
-calc_es <- function(t){
-  if(t<0){
-    #Buck, Arden L. 1981. New Equations for Computing Vapor Pressure and Enhancement Factor"
-    b = 17.966
-    c=247.15
-  }else{
-    b = 17.368
-    c = 238.88
-  }
-  a = 611.21 #in Pa
-  d = 234.5
-  a*exp((b-t/d)*(t/(c+t)))
+# This function calculates the saturation vapor pressure from air temperature
+# using the Buck- Arden L. equation.
+calc_es <- function(t_vec) {
+  b_vec <- ifelse(t_vec < 0, 17.966, 17.368)
+  c_vec <- ifelse(t_vec < 0, 247.15, 238.88)
+  a <- 611.21 # in Pa
+  d <- 234.5
+  a * exp((b_vec - t_vec / d) * (t_vec / (c_vec + t_vec)))
 }
 
+# This function calculates the distance between two points in a 2D coordinate system.
 dist <- function(x1, y1, x2, y2) {
   ((x1-x2)^2 + (y1-y2)^2)^0.5
 }
 
+# This function takes two data frames with x and y coordinates and merges them, calculating the
+# closest point in the second data frame to each point in the first data frame and adding this
+# information to a new column of the first data frame.
 dist_merge <- function(x, y, xeast, xnorth, yeast, ynorth){
   tmp <- t(apply(x[,c(xeast, xnorth)], 1, function(x, y){
     dists <- apply(y, 1, function(x, y) dist(x[2], x[1], y[2], y[1]), x)
@@ -122,9 +118,9 @@ summary(mod_width_size_universal)
 
 #### SITES COORDINATES ####
 sites <- leaf_size_df %>% 
-  dplyr::select(Site = `Site name`,lat = Latitude, lon = Longitude) %>% 
+  dplyr::select(Site = `Site name`,lat = Latitude, lon = Longitude) %>%
   group_by(Site) %>% 
-  summarise_all(unique)
+  summarise(across(everything(),unique))
 
 # # Run only first time
 # # Define coordinate reference system
@@ -154,25 +150,39 @@ sites <- leaf_size_df %>%
 
 #### ENVIRONMENTAL VARIABLES DF ####
 path_env <- list.files(path="R/data/ERA_values", "*.csv$", full.names=TRUE, recursive = TRUE)
-env_df <- purrr::map_df(path_env,read_csv)
+env_df <- purrr::map_df(path_env[1],read_csv)%>% 
+  dplyr::select(-c(`system:index`,.geo, Hour)) %>% 
+  na.omit()
+
+env_df_coord = env_df %>% dplyr::select(si_lat, si_long) %>% distinct()
+
+env_df_coord <- dist_merge_mod(sites%>% rename(si_lat = lat,si_long = lon), 
+                              env_df_coord, 'si_long', 'si_lat', 'si_long', 'si_lat')
 
     
-env_df1 <- env_df %>% 
-  rename(
-    Tkdew = dew_point,
-    Tkair = temperature
-    ) %>% 
-  rowwise() %>% 
-  mutate(
-    Tair = Tkair-273.15,
-    Tdew = Tkdew-273.15,
-    es = calc_es(Tair),
-    rh = calc_rh(Tair,Tdew),
-    ea = es*rh/100,
-    vpd = es-ea,
-    ws = sqrt(u_wind_speed^2 + v_wind_speed^2),
-    date = lubridate::as_date(Date)
-  )
+env_df <- env_df_coord %>%
+  dplyr::select(Site, y_lat, y_long) %>%
+  dplyr::rename(si_lat = y_lat, si_long = y_long) %>%
+  dplyr::left_join(env_df, relationship = "many-to-many") 
+
+env_df$Tair = env_df$temperature - 273.15
+env_df$Tdew = env_df$dew_point - 273.15
+env_df$es = calc_es(env_df$Tair)
+env_df$rh = calc_rh(env_df$Tair, env_df$Tdew)
+env_df$ea = env_df$es * env_df$rh / 100
+env_df$vpd = env_df$es - env_df$ea
+env_df$ws = sqrt(env_df$u_wind_speed ^ 2 + env_df$v_wind_speed ^ 2)
+env_df$sw_in = env_df$sw_in / 3600
+env_df$sw_in_net = env_df$sw_in_net / 3600
+env_df$ppfd = env_df$sw_in * 4.6 * 0.5
+env_df$timestamp = lubridate::ymd_hms(env_df$Date)
+env_df$Date = lubridate::as_date(env_df$Date)
+env_df <- env_df%>%
+  dplyr::distinct()
+
+
+
+
 
 
 #### FPAR and LAI ####
@@ -211,6 +221,9 @@ fapar <- fapar %>%
                       LAI = as.numeric(LAI))
     FAPAR = zoo::na.approx(z[,c(3)],na.rm=FALSE, maxgap = as.numeric(100))
     LAI = zoo::na.approx(z[,c(4)],na.rm=FALSE, maxgap = as.numeric(100))
+    FAPAR = ifelse(FAPAR<0,0,FAPAR)
+    FAPAR = ifelse(FAPAR>1,1,FAPAR)
+    LAI = ifelse(LAI<0,0,LAI)
     z$FAPAR <- FAPAR
     z$LAI <- LAI
 
@@ -291,11 +304,43 @@ veg_height <- veg_height %>%
 
 #### CO2 ####
 co2 <- read_csv("R/data/co2_mm_mlo.csv", 
-                   skip = 56)
+                   skip = 56)  %>% 
+  mutate(Date = lubridate::ym(paste0(year,"-",month)))%>% 
+  dplyr::select(Date,average) %>% 
+  dplyr::rename(co2 = average)
+z = forecastML::fill_gaps(co2, date_col = 1, 
+                          frequency = '1 day',
+                          groups = NULL, 
+                          static_features = NULL)
+co2 <- zoo::na.approx(z[,2])
+z$co2 <- co2
+co2 <- z
+
+rm(z)
+
+#### ELEVATION ####
+sites_elevation <- leaf_size_df %>% 
+  dplyr::select(Site = `Site name`, elev = `Elevation (m)`) %>%
+  group_by(Site) %>% 
+  summarise(across(everything(),unique))
+
+
+#### FINAL DATASET ####
+env_df <- env_df %>% 
+  # filter(Site %in% c("Abisko","Abrams_Pennsylvania")) %>%
+  left_join(fapar %>% dplyr::select(-c(si_lat,si_long)) , by=c("Site","Date")) %>% 
+  left_join(emi %>% dplyr::select(-c(si_lat,si_long)), by=c("Site","Date")) %>% 
+  left_join(co2, by=c("Date")) %>% 
+  left_join(veg_height %>% dplyr::select(-c(si_lat,si_long)), by=c("Site")) %>% 
+  left_join(sites_elevation, by=c("Site"))
+
+
+env_df %>% 
+  group_by(Site) %>% 
+  group_split() %>% 
+  purrr::map(function(x){
+    write_csv(x,paste0("R/data/df_opt/", gsub("/","_",unique(x$Site)),".csv"))
+  })
 
 
 
-
-
-
-# env_df <- env_df %>% left_join(fapar)
