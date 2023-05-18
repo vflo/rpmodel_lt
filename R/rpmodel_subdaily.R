@@ -1026,7 +1026,7 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   
   ## 10.0 calculate frost and heat cost ####
   #Based in Villar y Merino - 2001 - Comparison of leaf construction costs in woody spe
-  assim <- mapply(calculate_assimilation_lethal, leafwidth, tcleaf, LAI, assim)
+  # assim <- mapply(calculate_assimilation_lethal, leafwidth, tcleaf, LAI, assim)
   
   ## 11.0 construct list for output
   out <- list(
@@ -1130,16 +1130,20 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
 # as inputs and calculates the C cost to replace all the canopy if some temperature 
 #thresholds are over-passed
 calculate_assimilation_lethal <- function(leafwidth, tcleaf, LAI, assim){
-  # Limit lethal temperatures as in Wright et al. 2017
-  lethal_temp <- (tcleaf < -5 | tcleaf > 50)
+
+  # Limit lethal temperatures as in Wright et al. 2017; Vitasse et al. 2013 
+  # The interaction between freezing tolerance and phenology in temperate deciduous trees;
+  #Neuner et al. 2020 Low temperatures at higher elevations require plants to exhibit increased
+  #freezing resistance throughout the summer months
+  lethal_temp <- (tcleaf < -10 | tcleaf > 50) #LT50
 
   # Calculate assimilation
   if(lethal_temp){
     
     # Calculate leaf size approximation as from Wright et al. 2017
-    leaf_size <- 1.5 * leafwidth^2 
+    leaf_size <- 1.5 * (leafwidth*100)^2 #in cm2
     
-    # Calculate g glucose cost per gram of leaf
+    # Calculate g glucose cost per gram of leaf (Villar and Merino 2001 New Phyto)
     # x=c(-2.5,4.483372921615201)
     # y=c(1.7352342158859466,1.2953156822810588)
     # lm(y~x)
@@ -1158,7 +1162,7 @@ calculate_assimilation_lethal <- function(leafwidth, tcleaf, LAI, assim){
     mole_C_m2 <- y_g_g / y_m2_g / g_glucose_per_to_mole * mole_glucose_per_mole_C
     
     # Calculate total cost
-    total_C_cost <- mole_C_m2 * LAI * 1e6 # micromole C
+    total_C_cost <- mole_C_m2 * LAI * 1e6 * 0.5 # micromole C Lethal50
     
     assim <- assim - total_C_cost
   }

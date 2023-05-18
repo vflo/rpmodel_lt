@@ -1134,59 +1134,64 @@ calc_ga <- function(ws, ust, canopy_height, tcleaf_root,
   GbN <- 1/(1/(k*ust)*mh) # boundary layer conductance under neutral condition (m s-1)
   GbN2 <- 1/(1.35*ust^(-2/3)) # boundary layer conductance according to Thom 1972
   
-  while(Hs_wrong){
-    if(gb_method %in% c("Choudhury_1988")){
-
-      zeta <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
-      x_h = x_m <- -5
-      y_h <- (1 - 16 * zeta)^0.5
-      y_m <- (1 - 16 * zeta)^0.25
-      if(zeta<0){
-        psi_h <- 2 * log((1 + y_h)/2)
-        psi_m <- 2 * log((1 + y_m)/2) + log((1 + y_m^2)/2) -2 * atan(y_m) + pi/2
-      }else{
-        psi_h <- x_h * zeta
-        psi_m <- x_m * zeta
+  if(gb_method %in% c("simple")) {
+    Ga = 0.00662*sqrt(u/leafwidth)
+  } else {
+    while(Hs_wrong){
+      if(gb_method %in% c("Choudhury_1988")){
+        
+        zeta <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
+        x_h = x_m <- -5
+        y_h <- (1 - 16 * zeta)^0.5
+        y_m <- (1 - 16 * zeta)^0.25
+        if(zeta<0){
+          psi_h <- 2 * log((1 + y_h)/2)
+          psi_m <- 2 * log((1 + y_m)/2) + log((1 + y_m^2)/2) -2 * atan(y_m) + pi/2
+        }else{
+          psi_h <- x_h * zeta
+          psi_m <- x_m * zeta
+        }
+        
+        z0m <- (z - d) * exp(-k * u/ust - psi_m)
+        wind_zh  <- pmax(0, (ust/k) * (log(pmax(0,(z - d))/z0m) - psi_m))
+        alpha <- 4.39 - 3.97 * exp(-0.258 * LAI)
+        Gb_h <- LAI * ((0.02/alpha) * sqrt(wind_zh/leafwidth) * 
+                         (1 - exp(-alpha/2)))
+        Ra_m <- pmax((log((z - d)/z0m) - psi_h), 0)/(k * ust)
+        Ra <- Ra_m + 1/Gb_h
+        Ga <- 1/Ra/0.92
+        
+      } else {
+          zeta <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
+          if (zeta<0){#unstable
+            x=(1-16*zeta)^(1/4)
+            faiM=2*log(0.5*(1+x))+log(0.5*(1+x^2))-2*atan(x)+1.5708 # diabatic correction factor for momentum
+            faiH=2*log(0.5*(1+x^2))   # diabatic correction factor for heat
+            Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
+            Ga=1/(1/(Gb)+1/(GaM))      # aerodynamic conductance for water vapor 
+          }else{#stable
+            faiM=6*log(1+zeta)
+            faiH=6*log(1+zeta)
+            Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
+            Ga=1/(1/(Gb)+1/(GaM))
+          }
+          
+        }
+      
+      Hs_new = Ga*0.92*cpm*(tcleaf_root-Ta)
+      if(counter == 100){
+        Hs_new <-  Hs
+        Ga=1/(1/(GbN2)+1/(GaM))
       }
-      
-      z0m <- (z - d) * exp(-k * u/ust - psi_m)
-      wind_zh  <- pmax(0, (ust/k) * (log(pmax(0,(z - d))/z0m) - psi_m))
-      alpha <- 4.39 - 3.97 * exp(-0.258 * LAI)
-      Gb_h <- LAI * ((0.02/alpha) * sqrt(wind_zh/leafwidth) * 
-                       (1 - exp(-alpha/2)))
-      Ra_m <- pmax((log((z - d)/z0m) - psi_h), 0)/(k * ust)
-      Ra <- Ra_m + 1/Gb_h
-      Ga <- 1/Ra/0.92
-      
-    }else{
-      zeta <- -(k*g*(z-d)*Hs)/(rho*CP*tk*ust^3) # atmospheric stability index
-      if (zeta<0){#unstable
-        x=(1-16*zeta)^(1/4)
-        faiM=2*log(0.5*(1+x))+log(0.5*(1+x^2))-2*atan(x)+1.5708 # diabatic correction factor for momentum
-        faiH=2*log(0.5*(1+x^2))   # diabatic correction factor for heat
-        Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
-        Ga=1/(1/(Gb)+1/(GaM))      # aerodynamic conductance for water vapor 
-      }else{#stable
-        faiM=6*log(1+zeta)
-        faiH=6*log(1+zeta)
-        Gb=1/(1/(k*ust)*(mh+faiM-faiH))  # add diabatic correction for bounday layer conductance (m s-1)
-        Ga=1/(1/(Gb)+1/(GaM))
-      }
-      
+      if((Hs_new-Hs)^2>1){
+        Hs <- (Hs + Hs_new)/2
+        counter <- counter + 1
+      }else{Hs_wrong <- FALSE}
     }
-    
-  Hs_new = Ga*0.92*cpm*(tcleaf_root-Ta)
-  if(counter == 100){
-    Hs_new <-  Hs
-    Ga=1/(1/(GbN2)+1/(GaM))
-  }
-    if((Hs_new-Hs)^2>1){
-      Hs <- (Hs + Hs_new)/2
-      counter <- counter + 1
-    }else{Hs_wrong <- FALSE}
   }
   
   return(Ga)
+  
 }
 
 

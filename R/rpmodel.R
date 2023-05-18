@@ -226,7 +226,7 @@ rpmodel_lt <- function(
           method_jmaxlim = method_jmaxlim,
           do_ftemp_kphio = do_ftemp_kphio,
           do_soilmstress = do_soilmstress,
-          returnvar = returnvarL,
+          returnvar = returnvar,
           verbose = verbose)
         #Latent Heat Loss calculation
         if(is.na(df_res$gs)){df_res$gs = 0}

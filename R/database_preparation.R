@@ -119,8 +119,10 @@ summary(mod_width_size_universal)
 #### SITES COORDINATES ####
 sites <- leaf_size_df %>% 
   dplyr::select(Site = `Site name`,lat = Latitude, lon = Longitude) %>%
-  group_by(Site) %>% 
-  summarise(across(everything(),unique))
+  dplyr::group_by(Site) %>% 
+  dplyr::summarise(across(everything(),unique))
+time_zone = lutz::tz_lookup_coords(sites$lat, sites$lon,"accurate")
+timezones <- tibble(Site = sites$Site, time_zone = time_zone)
 
 # # Run only first time
 # # Define coordinate reference system
@@ -150,7 +152,7 @@ sites <- leaf_size_df %>%
 
 #### ENVIRONMENTAL VARIABLES DF ####
 path_env <- list.files(path="R/data/ERA_values", "*.csv$", full.names=TRUE, recursive = TRUE)
-env_df <- purrr::map_df(path_env[1],read_csv)%>% 
+env_df <- purrr::map_df(path_env,read_csv)%>% 
   dplyr::select(-c(`system:index`,.geo, Hour)) %>% 
   na.omit()
 
@@ -163,7 +165,8 @@ env_df_coord <- dist_merge_mod(sites%>% rename(si_lat = lat,si_long = lon),
 env_df <- env_df_coord %>%
   dplyr::select(Site, y_lat, y_long) %>%
   dplyr::rename(si_lat = y_lat, si_long = y_long) %>%
-  dplyr::left_join(env_df, relationship = "many-to-many") 
+  dplyr::left_join(env_df, relationship = "many-to-many") %>% 
+  dplyr::left_join(timezones)
 
 env_df$Tair = env_df$temperature - 273.15
 env_df$Tdew = env_df$dew_point - 273.15
@@ -176,12 +179,13 @@ env_df$sw_in = env_df$sw_in / 3600
 env_df$sw_in_net = env_df$sw_in_net / 3600
 env_df$ppfd = env_df$sw_in * 4.6 * 0.5
 env_df$timestamp = lubridate::ymd_hms(env_df$Date)
-env_df$Date = lubridate::as_date(env_df$Date)
+# env_df$timestamp =  purrr::map(env_df %>% split(seq(nrow(.))),
+#                                function(x) {
+#                                  lubridate::with_tz(x$timestamp_origin,x$time_zone)
+#                                  }) %>% bind_rows()
+env_df$Date = lubridate::as_date(env_df$timestamp)
 env_df <- env_df%>%
   dplyr::distinct()
-
-
-
 
 
 
@@ -257,8 +261,9 @@ emi <- emi %>%
   left_join(emi_coord %>% 
               dplyr::select(Site,y_lat, y_long) %>%
               rename(si_lat = y_lat,
-                     si_long = y_long))%>% 
-  filter(QC_day %in% c(0)) %>%
+                     si_long = y_long),
+            relationship = "many-to-many") %>% 
+  filter(QC_day %in% c(0,1)) %>%
   group_by(Date,Site) %>% 
   summarise_all(mean, na.rm = TRUE) %>% 
   ungroup() %>% 
@@ -274,6 +279,10 @@ emi <- emi %>%
     Emis_32 = zoo::na.approx(z[,c(4)],na.rm=FALSE, maxgap = as.numeric(100))
     z$Emis_31 <- Emis_31
     z$Emis_32 <- Emis_32
+    
+    z[is.na(z$Emis_31),"Emis_31"] <- mean(z$Emis_31,na.rm = TRUE)
+    z[is.na(z$Emis_32),"Emis_32"] <- mean(z$Emis_32,na.rm = TRUE)
+
 
     z
   }) %>% bind_rows()
@@ -333,6 +342,9 @@ env_df <- env_df %>%
   left_join(co2, by=c("Date")) %>% 
   left_join(veg_height %>% dplyr::select(-c(si_lat,si_long)), by=c("Site")) %>% 
   left_join(sites_elevation, by=c("Site"))
+
+env_df[is.na(env_df$Emis_31),"Emis_31"] <- 0.97
+env_df[is.na(env_df$Emis_32),"Emis_32"] <- 0.97
 
 
 env_df %>% 
