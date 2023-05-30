@@ -1211,3 +1211,26 @@ calc_air_density <- function(patm, tc){
   mol_mas_dry_air = 28.9652 #g mol-1
   patm * mol_mas_dry_air / (mol_gas_const * (tc+273.15))*1e-3  # air density (kg m-3)
 }
+
+
+
+
+
+
+
+
+
+
+
+calc_soilmstress <- function(
+    soilm,
+    AI = 1
+){
+  
+  a <- pmin((0.62*AI^-0.45), 1)
+  b <- pmin((0.34*AI^-0.60), 1)
+  
+  outstress <- ifelse(soilm<=b,(a/b*soilm),a)
+  
+  return(outstress)
+}

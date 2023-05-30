@@ -263,9 +263,7 @@ rpmodel_core <- function(
   beta = ifelse(c4, 146/9, 146),
   c_cost = 0.41, # Change to 0.05336251 if method_jmalim = "smith19" is used
   soilm = stopifnot(!do_soilmstress),
-  meanalpha = 1.0,
-  apar_soilm = 0.0,
-  bpar_soilm = 0.73300,
+  AI = 1,
   c4 = FALSE,
   method_jmaxlim = "wang17",
   do_ftemp_kphio = TRUE,
@@ -315,13 +313,13 @@ rpmodel_core <- function(
     }
   }
 
-  #---- soil moisture stress as a function of soil moisture and mean alpha -----
+  #---- soil moisture stress as a function of soil moisture and aridity -----
   if (do_soilmstress) {
-    if (length(meanalpha) > 1){
-      warning("Argument 'meanalpha' has length > 1. Only the first element is used.")
-      meanalpha <- meanalpha[1]
+    if (length(AI) > 1){
+      warning("Argument 'AI' has length > 1. Only the first element is used.")
+      AI <- AI[1]
     }
-    soilmstress <- calc_soilmstress( soilm, meanalpha, apar_soilm, bpar_soilm )
+    soilmstress <- calc_soilmstress(soilm, AI)
   }
   else {
     soilmstress <- 1.0

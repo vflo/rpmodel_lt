@@ -3,16 +3,16 @@
 ########################################################################
 # 01.load the libraries
 ########################################################################
-# setwd('/rds/general/user/vflosier/home/opt_leaf')
+setwd('/rds/general/user/vflosier/home/opt_leaf')
 # getwd()
-setwd("/data/r_users/vflo/rpmodel_lt")
+# setwd("/data/r_users/vflo/rpmodel_lt")
 library(bigleaf)
 library(zoo)
 library(tidyverse)
 sapply(list("R/rpmodel_core.R","R/rpmodel.R","R/rpmodel_subdaily.R",
             "R/subroutines.R","R/include_fapar_lai.R","R/include_albedo.R"),source,.GlobalEnv)
 
-
+set.seed(7)
 
 ########################################################################
 # 02. load data
@@ -42,14 +42,56 @@ opt_fn <- function(par, df){
                             frac_PAR = 0.5, #Fraction of incoming solar irradiance that is photosynthetically active radiation (PAR
                             fanir = 0.35 #Fraction of NIR absorbed
                           ))
-  anet <- res$assim - res$rd
-  rd <- res$rd
-  a <- res$assim
+  
+  # cost_df <- data.frame(
+  #   timestamp = df$timestamp,
+  #   ppfd = df$ppfd,
+  #   anet = res$assim - res$rd,
+  #   rd = res$rd,
+  #   a = res$assim,
+  #   e = res$e,
+  #   vcmax = res$vcmax,
+  #   ns_star = res$ns_star
+  #   ) %>% 
+  #   filter(ppfd>0) %>% 
+  #   mutate(MONTH = lubridate::month(timestamp)) %>%
+  #   group_by(MONTH) %>%
+  #   summarise(anet = mean(anet,na.rm=TRUE),
+  #             rd = mean(rd,na.rm=TRUE),
+  #             a = mean(a,na.rm=TRUE),
+  #             e = mean(e,na.rm=TRUE),
+  #             vcmax = mean(vcmax,na.rm=TRUE),
+  #             ns_star = mean(ns_star,na.rm=TRUE),
+  #             cost_e = ns_star*e/a,
+  #             cost_vcmax = 146*vcmax/a,
+  #             cost =  cost_e + cost_vcmax) %>% ungroup()
+  cost_df <- data.frame(
+    timestamp = df$timestamp,
+    ppfd = df$ppfd,
+    anet = res$assim - res$rd,
+    rd = res$rd,
+    a = res$assim,
+    e = res$e,
+    vcmax = res$vcmax,
+    ns_star = res$ns_star,
+    cost_e =  res$ns_star* res$e/ res$assim,
+    cost_vcmax = 146* res$vcmax/ res$assim,
+    cost_aggr =  res$ns_star* res$e/ res$assim + 146* res$vcmax/ res$assim
+  ) %>% 
+    filter(ppfd>0)
+    
+  
   print(paste("Site:",unique(df$Site),"/ leaf width:",
-              leaf_width,"/ Net assimilation:", mean(anet,na.rm=TRUE),
-              "/ Assimilation:", mean(a,na.rm=TRUE),
-              "/ Rd:", mean(rd,na.rm=TRUE)))
-  mean(anet,na.rm=TRUE)
+              leaf_width,"/ Net assimilation:", mean(cost_df$anet,na.rm=TRUE),
+              "/ Assimilation:", mean(cost_df$a,na.rm=TRUE),
+              "/ Rd:", mean(cost_df$rd,na.rm=TRUE),
+              "/ cost_e:",mean(cost_df$cost_e,na.rm=TRUE),
+              "/ cost_vcmax:",mean(cost_df$cost_vcmax,na.rm=TRUE),
+              "/ cost:",mean(cost_df$cost_e, na.rm=TRUE)+mean(cost_df$cost_vcmax, na.rm=TRUE),
+              "/ cost_aggr:",mean(cost_df$cost_aggr,na.rm=TRUE),
+              "/ e:", mean(cost_df$e,na.rm=TRUE)))
+  
+  (mean(cost_df$cost_e, na.rm=TRUE)+mean(cost_df$cost_vcmax, na.rm=TRUE))
   
 }
 
@@ -71,7 +113,7 @@ calc_opt_leaf_size <- function(file_site){
     lower = 0.0001,
     upper = 2,
     method = "L-BFGS-B",
-    control = list(fnscale= -1),
+    control = list(reltol=1e-2, ndeps = 1e-2),
     df = df_site
   )
   
@@ -90,7 +132,7 @@ calc_opt_leaf_size <- function(file_site){
     lower = 0.0001,
     upper = 2,
     method = "L-BFGS-B",
-    control = list(fnscale= -1),
+    control = list(reltol=1e-2, ndeps = 1e-2),
     df = df_site
   )
   
@@ -109,7 +151,7 @@ calc_opt_leaf_size <- function(file_site){
     lower = 0.0001,
     upper = 2,
     method = "L-BFGS-B",
-    control = list(fnscale= -1),
+    control = list(reltol=1e-2, ndeps = 1e-2),
     df = df_site
   )
   
@@ -128,7 +170,7 @@ calc_opt_leaf_size <- function(file_site){
     lower = 0.0001,
     upper = 2,
     method = "L-BFGS-B",
-    control = list(fnscale= -1),
+    control = list(reltol=1e-2, ndeps = 1e-2),
     df = df_site
   )
   
@@ -147,7 +189,7 @@ calc_opt_leaf_size <- function(file_site){
     lower = 0.0001,
     upper = 2,
     method = "L-BFGS-B",
-    control = list(fnscale= -1),
+    control = list(reltol=1e-2, ndeps = 1e-2),
     df = df_site
   )
   
@@ -166,7 +208,7 @@ calc_opt_leaf_size <- function(file_site){
     lower = 0.0001,
     upper = 2,
     method = "L-BFGS-B",
-    control = list(fnscale= -1),
+    control = list(reltol=1e-2, ndeps = 1e-2),
     df = df_site
   )
   
@@ -209,18 +251,18 @@ calc_opt_leaf_size <- function(file_site){
 }
 
 
-calc_opt_leaf_size(filenames[547])
-# envir_vars<-as.character(ls())
+# calc_opt_leaf_size(filenames[547])
+envir_vars<-as.character(ls())
 
 
-# library(doSNOW)
-# cl <- makeCluster(2,'SOCK')
-# registerDoSNOW(cl) 
-# snow::clusterEvalQ(cl,lapply(c('bigleaf','zoo','tidyverse'), library, character.only = TRUE))
-# snow::clusterExport(cl, list=envir_vars,envir=environment())
-# obs_tsfs<-snow::clusterMap(cl = cl, fun=calc_opt_leaf_size,file_site=filenames[c(73,)])	
-# save(obs_tsfs,file='R/data/results_opt_leaf_01.RData')
-# stopCluster(cl)
+library(doSNOW)
+cl <- makeCluster(36,'SOCK')
+registerDoSNOW(cl)
+snow::clusterEvalQ(cl,lapply(c('bigleaf','zoo','tidyverse'), library, character.only = TRUE))
+snow::clusterExport(cl, list=envir_vars,envir=environment())
+obs_tsfs<-snow::clusterMap(cl = cl, fun=calc_opt_leaf_size,file_site=filenames)
+save(obs_tsfs,file='R/data/results_opt_leaf_01.RData')
+stopCluster(cl)
 
 
 

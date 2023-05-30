@@ -1,6 +1,7 @@
 # install.packages(c("cowplot", "googleway", "ggplot2", "ggrepel", 
 #                    "ggspatial", "libwgeom", "sf", "rnaturalearth", "rnaturalearthdata"))
 library(readxl)
+library(splashTools)
 library(tidyverse)
 library(lmerTest)
 library(readr)
@@ -53,6 +54,211 @@ dist <- function(x1, y1, x2, y2) {
   ((x1-x2)^2 + (y1-y2)^2)^0.5
 }
 
+
+
+# Summarise bbox of soil grids
+summary_soil_bbox <- function(foo, aggregation){
+  soil <- data_frame(widths = c(foo[[1]]$widths),
+                     clay = c(mean(c(foo[[1]][1,2],
+                                     foo[[2]][1,2],
+                                     foo[[3]][1,2],
+                                     foo[[4]][1,2],
+                                     foo[[5]][1,2]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][2,2],
+                                     foo[[2]][2,2],
+                                     foo[[3]][2,2],
+                                     foo[[4]][2,2],
+                                     foo[[5]][2,2]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][3,2],
+                                     foo[[2]][3,2],
+                                     foo[[3]][3,2],
+                                     foo[[4]][3,2],
+                                     foo[[5]][3,2]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][4,2],
+                                     foo[[2]][4,2],
+                                     foo[[3]][4,2],
+                                     foo[[4]][4,2],
+                                     foo[[5]][4,2]),
+                                   na.rm  = TRUE)),
+                     sand = c(mean(c(foo[[1]][1,3],
+                                     foo[[2]][1,3],
+                                     foo[[3]][1,3],
+                                     foo[[4]][1,3],
+                                     foo[[5]][1,3]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][2,3],
+                                     foo[[2]][2,3],
+                                     foo[[3]][2,3],
+                                     foo[[4]][2,3],
+                                     foo[[5]][2,3]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][3,3],
+                                     foo[[2]][3,3],
+                                     foo[[3]][3,3],
+                                     foo[[4]][3,3],
+                                     foo[[5]][3,3]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][4,3],
+                                     foo[[2]][4,3],
+                                     foo[[3]][4,3],
+                                     foo[[4]][4,3],
+                                     foo[[5]][4,3]),
+                                   na.rm  = TRUE)),
+                     om =   c(mean(c(foo[[1]][1,4],
+                                     foo[[2]][1,4],
+                                     foo[[3]][1,4],
+                                     foo[[4]][1,4],
+                                     foo[[5]][1,4]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][2,4],
+                                     foo[[2]][2,4],
+                                     foo[[3]][2,4],
+                                     foo[[4]][2,4],
+                                     foo[[5]][2,4]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][3,4],
+                                     foo[[2]][3,4],
+                                     foo[[3]][3,4],
+                                     foo[[4]][3,4],
+                                     foo[[5]][3,4]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][4,4],
+                                     foo[[2]][4,4],
+                                     foo[[3]][4,4],
+                                     foo[[4]][4,4],
+                                     foo[[5]][4,4]),
+                                   na.rm  = TRUE)),
+                     bd =   c(mean(c(foo[[1]][1,5],
+                                     foo[[2]][1,5],
+                                     foo[[3]][1,5],
+                                     foo[[4]][1,5],
+                                     foo[[5]][1,5]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][2,5],
+                                     foo[[2]][2,5],
+                                     foo[[3]][2,5],
+                                     foo[[4]][2,5],
+                                     foo[[5]][2,5]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][3,5],
+                                     foo[[2]][3,5],
+                                     foo[[3]][3,5],
+                                     foo[[4]][3,5],
+                                     foo[[5]][3,5]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][4,5],
+                                     foo[[2]][4,5],
+                                     foo[[3]][4,5],
+                                     foo[[4]][4,5],
+                                     foo[[5]][4,5]),
+                                   na.rm  = TRUE)),
+                     rfc =  c(mean(c(foo[[1]][1,6],
+                                     foo[[2]][1,6],
+                                     foo[[3]][1,6],
+                                     foo[[4]][1,6],
+                                     foo[[5]][1,6]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][2,6],
+                                     foo[[2]][2,6],
+                                     foo[[3]][2,6],
+                                     foo[[4]][2,6],
+                                     foo[[5]][2,6]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][3,6],
+                                     foo[[2]][3,6],
+                                     foo[[3]][3,6],
+                                     foo[[4]][3,6],
+                                     foo[[5]][3,6]),
+                                   na.rm  = TRUE),
+                              mean(c(foo[[1]][4,6],
+                                     foo[[2]][4,6],
+                                     foo[[3]][4,6],
+                                     foo[[4]][4,6],
+                                     foo[[5]][4,6]),
+                                   na.rm  = TRUE)),
+                     aggregation = aggregation
+  )
+  return(soil)
+  
+}
+
+
+get_soil <- function(coord_object){
+  soil <- medfateutils::soilgridsParams(coord_object)
+  soil$aggregation <- 0
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(1000) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc()
+    )
+    soil <- summary_soil_bbox(foo,1000) 
+  }
+  
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(2000) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc()
+    )
+    soil <- summary_soil_bbox(foo,2000)
+  }
+  
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(3000) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc()
+    )
+    soil <- summary_soil_bbox(foo,3000)
+  }
+  
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(4000) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc()
+    )
+    soil <- summary_soil_bbox(foo,4000)
+  }
+  
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(5000) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc()
+    )
+    soil <- summary_soil_bbox(foo,5000)
+  }
+  
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(10000) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc()
+    )
+    soil <- summary_soil_bbox(foo,10000)
+  }
+  soil$Site <- coord_object$Site
+  return(soil)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # This function takes two data frames with x and y coordinates and merges them, calculating the
 # closest point in the second data frame to each point in the first data frame and adding this
 # information to a new column of the first data frame.
@@ -97,22 +303,69 @@ leaf_shape_df <- read_excel("R/data/mcab078_suppl_supplementary_data.xlsx",
 #### LEAF WIDTH-AREA RELATIONSHIPS ####
 
 # By Family
-mod_width_size_fam <- lm(leaf_area_true~leaf_width:Family,data=leaf_shape_df)
+mod_width_size_fam <- lm(leaf_width~0+leaf_area_true:Family,data=leaf_shape_df)
 summary(mod_width_size_fam)
 
 # By Genus
-mod_width_size_gen<- lm(leaf_area_true~leaf_width:genus,data=leaf_shape_df)
+mod_width_size_gen<- lm(leaf_width~0+leaf_area_true:genus,data=leaf_shape_df)
 summary(mod_width_size_gen)
 
 # By Species
-mod_width_size_sp <- lm(leaf_area_true~leaf_width:taxon,
+mod_width_size_sp <- lm(leaf_width~0+leaf_area_true:taxon,
                          data=leaf_shape_df)
 summary(mod_width_size_sp)
 
 # universal
-mod_width_size_universal <- lmer(leaf_area_true~leaf_width+(1|Family/genus/taxon),
+mod_width_size_universal <- lm(log(leaf_width)~log(leaf_area_true),
                         data=leaf_shape_df)
 summary(mod_width_size_universal)
+
+
+
+#### LEAF PERCENTILE DISTRIBUTION ####
+leaf_size_percent <- leaf_size_df %>% 
+  dplyr::rename(Site = `Site name`)%>%
+  mutate(genus = str_split(`Genus species`, " ", simplify = TRUE)[,1],
+         species = str_split(`Genus species`, " ", simplify = TRUE)[,2],
+         taxon = paste(genus,species),
+         leaf_area_true = `Leaf size (cm2)`) %>%
+  dplyr::select(Site,Family,genus,species,taxon,leaf_area_true) %>% 
+  split(seq(nrow(.)))%>%
+  purrr::map_df(function(x){
+    taxon <- paste(leaf_shape_df$genus,leaf_shape_df$species)
+    if(x$taxon %in% taxon){
+      width = predict(mod_width_size_sp,x)
+    }else if(x$genus %in% leaf_shape_df$genus){
+      width = predict(mod_width_size_gen,x)
+    }else if(x$Family %in% leaf_shape_df$Family){
+      width = predict(mod_width_size_fam,x)
+    }else {
+      width = exp(predict(mod_width_size_universal,x))
+    }
+    return(tibble(x) %>% bind_cols(width = width))
+  }) %>% 
+  group_by(Site) %>% 
+  summarise(lwidth_05 = quantile(width, probs = c(0.05),na.rm = TRUE)*0.01,
+            lwidth_25 = quantile(width, probs = c(0.25),na.rm = TRUE)*0.01,
+            lwidth_50 = quantile(width, probs = c(0.5),na.rm = TRUE)*0.01,
+            lwidth_75 = quantile(width, probs = c(0.75),na.rm = TRUE)*0.01,
+            lwidth_95 = quantile(width, probs = c(0.95),na.rm = TRUE)*0.01,
+            lsize_05 = quantile(leaf_area_true, probs = c(0.05),na.rm = TRUE),
+            lsize_25 = quantile(leaf_area_true, probs = c(0.25),na.rm = TRUE),
+            lsize_50 = quantile(leaf_area_true, probs = c(0.5),na.rm = TRUE),
+            lsize_75 = quantile(leaf_area_true, probs = c(0.75),na.rm = TRUE),
+            lsize_95 = quantile(leaf_area_true, probs = c(0.95),na.rm = TRUE)
+            )
+
+# site_sp <- leaf_size_df %>% 
+#   dplyr::rename(Site = `Site name`)%>%
+#   mutate(genus = str_split(`Genus species`, " ", simplify = TRUE)[,1],
+#          species = str_split(`Genus species`, " ", simplify = TRUE)[,2],
+#          taxon = paste(genus,species)) %>%
+#   group_by(Site) %>% 
+#   dplyr::select(Family,genus,species,taxon) %>% 
+#   dplyr::distinct()
+
 
 
 
@@ -126,20 +379,20 @@ timezones <- tibble(Site = sites$Site, time_zone = time_zone)
 
 # # Run only first time
 # # Define coordinate reference system
-# prj4string <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-# my.projection <- st_crs(prj4string)
-# 
-# # Create sf object
-# lat_long_sf <- st_as_sf(sites, coords = c("lon", "lat"), crs = my.projection)
-# 
-# # Checking plot
-# theme_set(theme_bw())
-# world <- ne_countries(scale = "medium", returnclass = "sf")
-# ggplot(data = world) +
-#   geom_sf() +
-#   geom_point(data=sites,
-#              aes(x=lon, y=lat), colour="Deep Pink",
-#              fill="Pink",pch=21, size=3, alpha=I(0.7))
+prj4string <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+my.projection <- st_crs(prj4string)
+
+# Create sf object
+lat_long_sf <- st_as_sf(sites, coords = c("lon", "lat"), crs = my.projection)
+
+# Checking plot
+theme_set(theme_bw())
+world <- ne_countries(scale = "medium", returnclass = "sf")
+ggplot(data = world) +
+  geom_sf() +
+  geom_point(data=sites,
+             aes(x=lon, y=lat), colour="Deep Pink",
+             fill="Pink",pch=21, size=3, alpha=I(0.7))
 # 
 # 
 # # Save coordinates
@@ -334,6 +587,35 @@ sites_elevation <- leaf_size_df %>%
   summarise(across(everything(),unique))
 
 
+
+#### SOIL MOISTURE ####
+soil <- list()
+for(i in 1:nrow(lat_long_sf)){
+  soil[[i]] <- get_soil(lat_long_sf[i,])
+
+}
+# 
+save(soil, file="R/data/soil_leaves.Rdata")
+load(file="R/data/soil_leaves.Rdata")
+# 
+soil <- bind_rows(soil)
+
+
+env_df %>% 
+  group_by(Site) %>% 
+  group_split() %>% 
+  purrr::map(function(x){
+    x <- x %>% 
+      dplyr::select(-c(time_zone,timestamp)) %>% 
+      group_by(Site, Date) %>%
+      summarise(mean) %>% View()
+    rsplash::rspin_up()
+    
+    
+  })
+
+
+
 #### FINAL DATASET ####
 env_df <- env_df %>% 
   # filter(Site %in% c("Abisko","Abrams_Pennsylvania")) %>%
@@ -345,6 +627,11 @@ env_df <- env_df %>%
 
 env_df[is.na(env_df$Emis_31),"Emis_31"] <- 0.97
 env_df[is.na(env_df$Emis_32),"Emis_32"] <- 0.97
+
+
+
+
+
 
 
 env_df %>% 

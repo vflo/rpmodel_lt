@@ -310,11 +310,11 @@ rpmodel_subdaily <- function(
   
   #---- soil moisture stress as a function of soil moisture and mean alpha -----
   if (do_soilmstress) {
-    if (length(meanalpha) > 1){
-      warning("Argument 'meanalpha' has length > 1. Only the first element is used.")
-      meanalpha <- meanalpha[1]
+    if (length(AI) > 1){
+      warning("Argument 'AI' has length > 1. Only the first element is used.")
+      AI <- AI[1]
     }
-    soilmstress <- calc_soilmstress( soilm, meanalpha, apar_soilm, bpar_soilm )
+    soilmstress <- calc_soilmstress(soilm, AI)
   }
   else {
     soilmstress <- 1.0
@@ -343,8 +343,8 @@ rpmodel_subdaily <- function(
   rpmodel(tc, vpd, co2, fapar, LAI,
           ppfd, u, ustar, canopy_height, sw_in, patm, 
           elv, z, leafwidth, netrad, kphio, beta, c_cost,
-          soilm, meanalpha, apar_soilm, bpar_soilm, c4,
-          method_jmaxlim, do_ftemp_kphio, do_soilmstress, do_leaftemp = FALSE,
+          soilm, AI, c4, method_jmaxlim, do_ftemp_kphio, 
+          do_soilmstress, do_leaftemp = FALSE,
           gb_method = gb_method, epsleaf = epsleaf,
           energy_params = energy_params, verbose = verbose)%>% 
     as_tibble()-> df_Or
@@ -375,7 +375,9 @@ rpmodel_subdaily <- function(
                    LAI = LAI,
                    canopy_height = canopy_height,
                    patm = patm,
-                   epsleaf = epsleaf)
+                   epsleaf = epsleaf,
+                   soilm = soilm,
+                   soilmstress = soilmstress)
     
     # 2.1 apply the dailyUpscaling function 
     dataDaily <- dailyUpscaling(df = dfIn, 
@@ -405,7 +407,7 @@ rpmodel_subdaily <- function(
         res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
                        x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
                        unique(elv), unique(z), leafwidth, x$netrad, kphio, beta, c_cost,
-                       soilm, x$meanalpha, apar_soilm, bpar_soilm, c4,
+                       x$soilm, AI, c4,
                        method_jmaxlim, do_ftemp_kphio, do_soilmstress, 
                        do_leaftemp = do_leaftemp, gb_method = gb_method, 
                        verbose = verbose, epsleaf=x$epsleaf, energy_params = energy_params)%>% 
@@ -472,7 +474,7 @@ rpmodel_subdaily <- function(
                                  ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, 
                                  patm = x$patm, ns_star_opt = x$ns_star_opt, 
                                  gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, 
-                                 kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio, 
+                                 kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,
                                  soilmstress = soilmstress, method_jmaxlim = method_jmaxlim,
                                  c4 = c4, rd_to_vcmax = rd_to_vcmax, 
                                  beta = beta, c_cost = c_cost, 
@@ -507,7 +509,7 @@ rpmodel_subdaily <- function(
                                ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, 
                                patm = x$patm, ns_star_opt = x$ns_star_opt, 
                                gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, 
-                               kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio, 
+                               kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,
                                soilmstress = soilmstress, method_jmaxlim = method_jmaxlim,
                                c4 = c4, rd_to_vcmax = rd_to_vcmax, 
                                beta = beta, c_cost = c_cost, 
@@ -842,6 +844,7 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   kTo <- 25.0           # base temperature, deg C (Prentice, unpublished)
   rd_to_vcmax <- 0.015  # Ratio of Rdark to Vcmax25, number from Atkin et al., 2015 for C3 herbaceous
   
+  
   ## viscosity correction factor = viscosity( temp, press )/viscosity( 25 degC, 1013.25 Pa)
   ns      <- viscosity_h2o( tcleaf, patm )  # Pa sc4, 1.0,
   ns25    <- viscosity_h2o( kTo, kPo )  # Pa s
@@ -876,15 +879,15 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   
   # 2. INSTANTANEOUS Vcmax and Jmax----
   # The Arrhenius equation constants:
-  # Ha = 65330# [J mol-1]
-  # Haj = 43900
-  # Rgas = 8.314 # [J mol-1 K-1]
-  # vcmaxAdjusted = vcmax_opt * exp((Ha/Rgas)*(1/tkleaf_opt - 1/tkleaf))
-  # jmaxAdjusted = jmax_opt * exp((Haj/Rgas)*(1/tkleaf_opt - 1/tkleaf))
-  # rm(Rgas,Ha,Haj)
+  Ha = 65330# [J mol-1]
+  Haj = 43900
+  Rgas = 8.314 # [J mol-1 K-1]
+  vcmaxAdjusted = vcmax_opt * exp((Ha/Rgas)*(1/tkleaf_opt - 1/tkleaf))
+  jmaxAdjusted = jmax_opt * exp((Haj/Rgas)*(1/tkleaf_opt - 1/tkleaf))
+  rm(Rgas,Ha,Haj)
   
-  vcmaxAdjusted = vcmax_opt * ftemp_inst_vcmax(tcleaf, tcleaf_opt)
-  jmaxAdjusted = jmax_opt * ftemp_inst_jmax(tcleaf, tcleaf_opt)
+  # vcmaxAdjusted = vcmax_opt * ftemp_inst_vcmax(tcleaf, tcleaf_opt)
+  # jmaxAdjusted = jmax_opt * ftemp_inst_jmax(tcleaf, tcleaf_opt)
   
   
   # 3. instantaneous (with acclimated xiPa, and adjusted with the actual VPD)
@@ -1048,7 +1051,8 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     vcmax25         = vcmax25,
     rd              = rd,
     tcleaf          = tcleaf,
-    vpd_leaf        = vpd
+    vpd_leaf        = vpd,
+    ns_star         = ns_star
   )
   
   return(out)
