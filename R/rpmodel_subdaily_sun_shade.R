@@ -268,9 +268,9 @@
 #'   elv = 0)
 #' }
 #'
-rpmodel_subdaily <- function(
+rpmodel_subdaily_sun_shade <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
-    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, leafwidth = NA, netrad = NA,
+    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, lat = NA, long= NA, leafwidth = NA, netrad = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, AI = 1.0,
     c4 = FALSE, method_jmaxlim = "wang17",do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
@@ -326,6 +326,21 @@ rpmodel_subdaily <- function(
     ppfd[ppfd<0] <- 0
   }
   
+  #Solar elevation angle
+  DOY <- solrad::DayOfYear(TIMESTAMP)
+  beta_angle <- solrad::Altitude(DOY = DOY, 
+                                 Lat = lat,
+                                 Lon = long,
+                                 SLon = long,
+                                 DS = 0) *pi/180
+  
+  kb = 0.5/sin(beta_angle)
+  kb_prime = 0.46/sin(beta_angle)
+  
+  LAI_sun = (1-exp(-kb*LAI))/kb
+  LAI_sun <- ifelse(beta_angle<=0, 0,LAI_sun )
+  LAI_shade = LAI - LAI_sun
+  frac_sun = LAI_sun/LAI
   # 1.0 Calculate P model without acclimation
   # tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, ustar, canopy_height, sw_in, netrad, patm, meanalpha) %>% 
   #   split(seq(nrow(.))) %>%

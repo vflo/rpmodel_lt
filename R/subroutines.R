@@ -105,29 +105,29 @@ dampen_vec <- function( vec, tau ){
 #'
 #' @export
 
-calc_soilmstress <- function(
-  soilm,
-  meanalpha = 1.0,
-  apar_soilm = 0.0,
-  bpar_soilm = 0.685
-){
-  
-  # Fixed parameters
-  x0 <- 0.0
-  x1 <- 0.6
-  
-  y0 <- (apar_soilm + bpar_soilm * meanalpha)
-  
-  beta <- (1.0 - y0) / (x0 - x1)^2
-  outstress <- 1.0 - beta * ( soilm - x1 )^2
-  
-  ## bound between 0 and 1
-  outstress <- pmin(pmax(outstress, 0), 1)
-  # and set to 1.0 above soil moisture threshold x1.
-  outstress[soilm > x1] <- 1.0
-
-  return(outstress)
-}
+# calc_soilmstress <- function(
+#   soilm,
+#   meanalpha = 1.0,
+#   apar_soilm = 0.0,
+#   bpar_soilm = 0.685
+# ){
+#   
+#   # Fixed parameters
+#   x0 <- 0.0
+#   x1 <- 0.6
+#   
+#   y0 <- (apar_soilm + bpar_soilm * meanalpha)
+#   
+#   beta <- (1.0 - y0) / (x0 - x1)^2
+#   outstress <- 1.0 - beta * ( soilm - x1 )^2
+#   
+#   ## bound between 0 and 1
+#   outstress <- pmin(pmax(outstress, 0), 1)
+#   # and set to 1.0 above soil moisture threshold x1.
+#   outstress[soilm > x1] <- 1.0
+# 
+#   return(outstress)
+# }
 
 
 #' Calculates atmospheric pressure

@@ -88,7 +88,7 @@ rpmodel <- function(
       kphio = kphio,
       beta = beta,
       c_cost = c_cost,
-      soilm = stopifnot(!do_soilmstress),
+      soilm = soilm,
       AI = AI,
       c4 = c4,
       method_jmaxlim = method_jmaxlim,
