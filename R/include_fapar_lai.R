@@ -32,15 +32,15 @@ include_fapar_lai <- function(fn, fapar_noaa, fapar){
     #   mutate(timestamp = timestamp %>% lubridate::ymd() %>% 
     #            as.numeric()) %>% select(timestamp)
     # model_fapar <- splinefun(x=x$timestamp,y=fapar_filled$Fapar,method ='natural')
-    model_fapar <- qgam::qgam(Fapar ~ s(timestamp, bs = 'tp',k = k_), data = fapar_filled %>%
-                                dplyr::select(timestamp,Fapar) %>%
-                                mutate(timestamp = timestamp %>% lubridate::ymd() %>%
-                                         as.numeric()), qu = 0.8)
-    
-    model_lai <- qgam::qgam(Lai ~ s(timestamp, bs = 'tp', k = k_), data = fapar_filled %>%
-                              dplyr::select(timestamp,Lai) %>%
-                              mutate(timestamp = timestamp %>% lubridate::ymd() %>%
-                                       as.numeric()), qu = 0.8)
+    # model_fapar <- qgam::qgam(Fapar ~ s(timestamp, bs = 'tp',k = k_), data = fapar_filled %>%
+    #                             dplyr::select(timestamp,Fapar) %>%
+    #                             mutate(timestamp = timestamp %>% lubridate::ymd() %>%
+    #                                      as.numeric()), qu = 0.8)
+    # 
+    # model_lai <- qgam::qgam(Lai ~ s(timestamp, bs = 'tp', k = k_), data = fapar_filled %>%
+    #                           dplyr::select(timestamp,Lai) %>%
+    #                           mutate(timestamp = timestamp %>% lubridate::ymd() %>%
+    #                                    as.numeric()), qu = 0.8)
     # x <- fapar_filled$timestamp %>%lubridate::ymd() %>% as.numeric()
     # y_fapar <- fapar_filled$Fapar
     # y_lai <- fapar_filled$Lai
@@ -53,34 +53,52 @@ include_fapar_lai <- function(fn, fapar_noaa, fapar){
     # pred_LAI <- model_lai$pred(fn[,"timestamp"] %>%
     #                              lubridate::as_date() %>%
     #                              as.numeric())
-    pred_FAPAR <- predict(model_fapar, tibble(timestamp = fn$timestamp %>% 
-                                                lubridate::as_date() %>%
-                                                as.numeric()%>% 
-                                                unique()))
-    pred_LAI <- predict(model_lai, tibble(timestamp = fn$timestamp %>%
-                                            lubridate::as_date() %>%
-                                            as.numeric()%>% 
-                                            unique()))
+    # pred_FAPAR <- predict(model_fapar, tibble(timestamp = fn$timestamp %>% 
+    #                                             lubridate::as_date() %>%
+    #                                             as.numeric()%>% 
+    #                                             unique()))
+    # pred_LAI <- predict(model_lai, tibble(timestamp = fn$timestamp %>%
+    #                                         lubridate::as_date() %>%
+    #                                         as.numeric()%>% 
+    #                                         unique()))
+    
+    z = forecastML::fill_gaps(fapar_filled %>%
+                                dplyr::select(timestamp,Fapar,Lai) %>%
+                                mutate(date = timestamp %>% 
+                                         lubridate::ymd()) %>% 
+                                ungroup() %>% 
+                                dplyr::select(date,Fapar,Lai), 
+                              date_col = 1,
+                              frequency = '1 day')
+    z <- z %>% mutate(Fapar = as.numeric(Fapar),
+                      Lai = as.numeric(Lai))
+    FAPAR = zoo::na.approx(z[,c(2)],na.rm=FALSE, maxgap = as.numeric(100))
+    LAI = zoo::na.approx(z[,c(3)],na.rm=FALSE, maxgap = as.numeric(100))
+    FAPAR = ifelse(FAPAR<0,0,FAPAR)
+    FAPAR = ifelse(FAPAR>1,1,FAPAR)
+    LAI = ifelse(LAI<0,0,LAI)
+    z <- z %>% bind_cols(FAPAR= FAPAR, LAI = LAI)
     
     fn %>% 
       mutate(date = lubridate::as_date(timestamp)) %>% 
-      left_join(tibble(date = fn$timestamp%>% 
-                         lubridate::as_date() %>% 
-                         unique(), 
-                       FAPAR = pred_FAPAR) %>% 
-                  filter(date > min_date) %>%
-                  mutate(FAPAR = case_when(FAPAR<0~0,
-                                           FAPAR>1~1,
-                                           TRUE~FAPAR)),
+      left_join(z %>% dplyr::select(-c(Fapar, Lai)),
+      # left_join(tibble(date = fn$timestamp%>% 
+      #                    lubridate::as_date() %>% 
+      #                    unique(), 
+      #                  FAPAR = FAPAR) %>% 
+                  # filter(date > min_date) %>%
+                  # mutate(FAPAR = case_when(FAPAR<0~0,
+                  #                          FAPAR>1~1,
+                  #                          TRUE~FAPAR)),
                 by = "date") %>% 
-      left_join(tibble(date = fn$timestamp%>% 
-                         lubridate::as_date() %>% 
-                         unique(),  
-                       LAI = pred_LAI) %>%
-                  filter(date > min_date) %>% 
-                  mutate(LAI = case_when(LAI<0~0,
-                                         LAI>=0~LAI)),
-                by = "date") %>% 
+      # left_join(tibble(date = fn$timestamp%>% 
+      #                    lubridate::as_date() %>% 
+      #                    unique(),  
+      #                  LAI = LAI) %>%
+      #             filter(date > min_date) %>% 
+      #             mutate(LAI = case_when(LAI<0~0,
+      #                                    LAI>=0~LAI)),
+      #           by = "date") %>% 
       left_join(fapar_filled %>% 
                   dplyr::mutate(date = lubridate::ymd(timestamp)) %>% 
                   dplyr::ungroup() %>% 

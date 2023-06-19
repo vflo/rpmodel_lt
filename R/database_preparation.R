@@ -10,6 +10,7 @@ library(sp)
 library(rgdal)
 library(data.table)
 library(R.utils)
+library(rsplashtest)
 library("rnaturalearth")
 library("rnaturalearthdata")
 
@@ -187,60 +188,53 @@ summary_soil_bbox <- function(foo, aggregation){
 
 
 get_soil <- function(coord_object){
-  soil <- medfateutils::soilgridsParams(coord_object)
+  soil <- medfateutils::soilgridsParams(coord_object,
+                                        widths = 1000)[1,]
   soil$aggregation <- 0
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(250) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc(),
+                                         widths = 1000
+    )
+    soil <- summary_soil_bbox(foo,250)[1,]
+  }
+  if(any(is.na(soil))){
+    foo <- medfateutils::soilgridsParams(coord_object %>%
+                                           st_buffer(500) %>%
+                                           st_bbox() %>%
+                                           st_as_sfc(),
+                                         widths = 1000
+    )
+    soil <- summary_soil_bbox(foo,500)[1,]
+  }
   if(any(is.na(soil))){
     foo <- medfateutils::soilgridsParams(coord_object %>%
                                            st_buffer(1000) %>%
                                            st_bbox() %>%
-                                           st_as_sfc()
+                                           st_as_sfc(),
+                                         widths = 1000
     )
-    soil <- summary_soil_bbox(foo,1000) 
+    soil <- summary_soil_bbox(foo,1000)[1,]
   }
-  
-  if(any(is.na(soil))){
-    foo <- medfateutils::soilgridsParams(coord_object %>%
-                                           st_buffer(2000) %>%
-                                           st_bbox() %>%
-                                           st_as_sfc()
-    )
-    soil <- summary_soil_bbox(foo,2000)
-  }
-  
-  if(any(is.na(soil))){
-    foo <- medfateutils::soilgridsParams(coord_object %>%
-                                           st_buffer(3000) %>%
-                                           st_bbox() %>%
-                                           st_as_sfc()
-    )
-    soil <- summary_soil_bbox(foo,3000)
-  }
-  
   if(any(is.na(soil))){
     foo <- medfateutils::soilgridsParams(coord_object %>%
                                            st_buffer(4000) %>%
                                            st_bbox() %>%
-                                           st_as_sfc()
+                                           st_as_sfc(),
+                                         widths = 1000
     )
-    soil <- summary_soil_bbox(foo,4000)
+    soil <- summary_soil_bbox(foo,5000)[1,]
   }
-  
-  if(any(is.na(soil))){
-    foo <- medfateutils::soilgridsParams(coord_object %>%
-                                           st_buffer(5000) %>%
-                                           st_bbox() %>%
-                                           st_as_sfc()
-    )
-    soil <- summary_soil_bbox(foo,5000)
-  }
-  
   if(any(is.na(soil))){
     foo <- medfateutils::soilgridsParams(coord_object %>%
                                            st_buffer(10000) %>%
                                            st_bbox() %>%
-                                           st_as_sfc()
+                                           st_as_sfc(),
+                                         widths = 1000
     )
-    soil <- summary_soil_bbox(foo,10000)
+    soil <- summary_soil_bbox(foo,10000)[1,]
   }
   soil$Site <- coord_object$Site
   return(soil)
@@ -248,6 +242,31 @@ get_soil <- function(coord_object){
 
 
 
+### splash wrapper
+runsplash<-function(df,lat,elev,slop,asp,au,soil){
+  #### whc of 150mm ~ deph<1m
+  soil_data <- soil#c(unique(soil$sand),unique(soil$clay),unique(soil$om),unique(soil$rfc),unique(soil$bd),1)
+  prec <- df %>% group_by(Date) %>% dplyr::select(total_precipitation_hourly) %>% 
+    summarise(prec = sum(total_precipitation_hourly,na.rm=TRUE))
+  sw_in <- df %>% group_by(Date) %>% dplyr::select(sw_in) %>% summarise(sw_in = mean(sw_in,na.rm=TRUE))
+  ta <- df %>% group_by(Date) %>% dplyr::select(Tair) %>% summarise(ta = mean(Tair,na.rm=TRUE))
+  as.data.frame(
+    splash.point(
+      sw_in=sw_in$sw_in,	# shortwave radiation W/m2
+      tc=ta$ta,		# air temperature C
+      pn= prec$prec*1000,		# precipitation mm
+      lat=lat,		# latitude deg
+      elev=elev,		# elevation masl
+      slop=slop,	# slope deg
+      asp=asp,		# aspect deg
+      soil_data=soil_data, 		# soil data: sand,clay,som in w/w %. Gravel v/v %, bulk density g/cm3, and depth to the bedrock (m)**
+      Au=au,		# upslope area m2
+      resolution=90.0, # resolution pixel dem used to get Au
+      time_index=ta$Date,
+      ts_out=FALSE
+    )
+  )
+}
 
 
 
@@ -588,32 +607,6 @@ sites_elevation <- leaf_size_df %>%
 
 
 
-#### SOIL MOISTURE ####
-soil <- list()
-for(i in 1:nrow(lat_long_sf)){
-  soil[[i]] <- get_soil(lat_long_sf[i,])
-
-}
-# 
-save(soil, file="R/data/soil_leaves.Rdata")
-load(file="R/data/soil_leaves.Rdata")
-# 
-soil <- bind_rows(soil)
-
-
-env_df %>% 
-  group_by(Site) %>% 
-  group_split() %>% 
-  purrr::map(function(x){
-    x <- x %>% 
-      dplyr::select(-c(time_zone,timestamp)) %>% 
-      group_by(Site, Date) %>%
-      summarise(mean) %>% View()
-    rsplash::rspin_up()
-    
-    
-  })
-
 
 
 #### FINAL DATASET ####
@@ -623,7 +616,8 @@ env_df <- env_df %>%
   left_join(emi %>% dplyr::select(-c(si_lat,si_long)), by=c("Site","Date")) %>% 
   left_join(co2, by=c("Date")) %>% 
   left_join(veg_height %>% dplyr::select(-c(si_lat,si_long)), by=c("Site")) %>% 
-  left_join(sites_elevation, by=c("Site"))
+  left_join(sites_elevation, by=c("Site")) %>% 
+  left_join(leaf_size_percent, by=c("Site"))
 
 env_df[is.na(env_df$Emis_31),"Emis_31"] <- 0.97
 env_df[is.na(env_df$Emis_32),"Emis_32"] <- 0.97
@@ -631,15 +625,58 @@ env_df[is.na(env_df$Emis_32),"Emis_32"] <- 0.97
 
 
 
+#### SOIL MOISTURE ####
+# soil <- list()
+# for(i in 1:nrow(lat_long_sf)
+#     ){
+#   soil[[i]] <- get_soil(lat_long_sf[i,])
+# 
+# }
+# soil <- bind_rows(soil)
+# soil[which(soil$Site == "Villar_Devon_Is_Canada"),"clay"] <- 25
+# soil[which(soil$Site == "Villar_Devon_Is_Canada"),"sand"] <- 40
+# soil[which(soil$Site == "Villar_Devon_Is_Canada"),"om"] <- 7
+# soil[which(soil$Site == "Villar_Devon_Is_Canada"),"bd"] <- 1.35
+# soil[which(soil$Site == "Villar_Devon_Is_Canada"),"rfc"] <- 20
+# 
+# save(soil, file="R/data/soil_leaves.Rdata")
+load(file="R/data/soil_leaves.Rdata")
+# 
+
+env_df <- env_df %>% 
+  # filter(Site %in% c("Abisko","Abrams_Pennsylvania")) %>%
+  left_join(soil , by=c("Site")) 
 
 
+gc()
 
 env_df %>% 
   group_by(Site) %>% 
-  group_split() %>% 
-  purrr::map(function(x){
-    write_csv(x,paste0("R/data/df_opt/", gsub("/","_",unique(x$Site)),".csv"))
+  group_split()%>% 
+  # magrittr::extract(c(228:682)) %>% 
+  purrr::map_df(function(x){
+    # if(is.null(x)){return(NULL)}else{      # dplyr::select(-c(time_zone,timestamp)) %>% 
+      # group_by(Site, Date) %>%
+      # summarise_all(mean) %>%
+      foo <- runsplash(x,unique(x$si_lat),unique(x$elev), slop = 0, asp = 0, au = 0, 
+                       soil =  c(unique(x$sand),unique(x$clay),unique(x$om),unique(x$rfc),unique(x$bd),1))
+      foo <- foo %>% bind_cols( x %>% dplyr::select(Date) %>% 
+                                  distinct())
+      write_csv(left_join(x,foo),paste0("R/data/df_opt/", gsub("/","_",unique(x$Site)),".csv"))
+      # }
+    gc()
   })
+  
+  
+  
+
+
+# env_df %>% 
+#   group_by(Site) %>% 
+#   group_split() %>% 
+#   purrr::map(function(x){
+#     write_csv(x,paste0("R/data/df_opt/", gsub("/","_",unique(x$Site)),".csv"))
+#   })
 
 
 

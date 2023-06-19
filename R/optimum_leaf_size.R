@@ -9,260 +9,334 @@ setwd('/rds/general/user/vflosier/home/opt_leaf')
 library(bigleaf)
 library(zoo)
 library(tidyverse)
+library(purrr)
 sapply(list("R/rpmodel_core.R","R/rpmodel.R","R/rpmodel_subdaily.R",
             "R/subroutines.R","R/include_fapar_lai.R","R/include_albedo.R"),source,.GlobalEnv)
 
 set.seed(7)
 
-########################################################################
-# 02. load data
-########################################################################
-
-
 #### read the files' paths
 filenames <- list.files(path="R/data/df_opt", "*.csv$", full.names=TRUE,recursive = TRUE)
 
-opt_fn <- function(par, df){
-  leaf_width <- par
-  res <- rpmodel_subdaily(TIMESTAMP = df$timestamp, tc = df$Tair, vpd = df$vpd,
-                          co2 = df$co2, fapar = df$FAPAR, LAI = df$LAI,
-                          ppfd = df$ppfd, u=df$ws, ustar = NA,# df$Ustar, 
-                          canopy_height = df$veg_height, patm =df$pa, 
-                          elv = df$elev, z = df$veg_height+2, leafwidth = leaf_width, 
-                          netrad = NA, #df$NETRAD,
-                          beta = 146.0, c_cost = 0.41, 
-                          do_leaftemp = TRUE,  gb_method = "simple",#Choudhury_1988",
-                          do_acclimation = TRUE, 
-                          upscaling_method = "noon", hour_reference_T = c(10,12,14), 
-                          acclim_days = 15, weighted_accl = TRUE, epsleaf = df$Emis_31, #thermal absorptivity of the leaf
-                          energy_params = list(
-                            ste_bolz = 5.67e-8, #W m^-2 K^-4
-                            cpm = 75.38, #J mol^-1 ºC-1
-                            J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
-                            frac_PAR = 0.5, #Fraction of incoming solar irradiance that is photosynthetically active radiation (PAR
-                            fanir = 0.35 #Fraction of NIR absorbed
-                          ))
+
+
+########################################################################
+# 02. OPTIMUM SIZE
+########################################################################
+
+# 
+# opt_fn <- function(par, df){
+#   leaf_width <- par
+#   res <- rpmodel_subdaily(TIMESTAMP = df$timestamp, tc = df$Tair, vpd = df$vpd,
+#                           co2 = df$co2, fapar = df$FAPAR, LAI = df$LAI,
+#                           ppfd = df$ppfd, u=df$ws, ustar = NA,# df$Ustar, 
+#                           canopy_height = df$veg_height, patm =df$pa, 
+#                           elv = df$elev, z = df$veg_height+2, leafwidth = leaf_width, 
+#                           netrad = NA, #df$NETRAD,
+#                           beta = 146.0, c_cost = 0.41, 
+#                           do_leaftemp = TRUE,  gb_method = "simple",#Choudhury_1988",
+#                           do_acclimation = TRUE, 
+#                           upscaling_method = "noon", hour_reference_T = c(10,12,14), 
+#                           acclim_days = 15, weighted_accl = TRUE, epsleaf = df$Emis_31, #thermal absorptivity of the leaf
+#                           energy_params = list(
+#                             ste_bolz = 5.67e-8, #W m^-2 K^-4
+#                             cpm = 75.38, #J mol^-1 ºC-1
+#                             J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
+#                             frac_PAR = 0.5, #Fraction of incoming solar irradiance that is photosynthetically active radiation (PAR
+#                             fanir = 0.35 #Fraction of NIR absorbed
+#                           ))
+#   
+#   # cost_df <- data.frame(
+#   #   timestamp = df$timestamp,
+#   #   ppfd = df$ppfd,
+#   #   anet = res$assim - res$rd,
+#   #   rd = res$rd,
+#   #   a = res$assim,
+#   #   e = res$e,
+#   #   vcmax = res$vcmax,
+#   #   ns_star = res$ns_star
+#   #   ) %>% 
+#   #   filter(ppfd>0) %>% 
+#   #   mutate(MONTH = lubridate::month(timestamp)) %>%
+#   #   group_by(MONTH) %>%
+#   #   summarise(anet = mean(anet,na.rm=TRUE),
+#   #             rd = mean(rd,na.rm=TRUE),
+#   #             a = mean(a,na.rm=TRUE),
+#   #             e = mean(e,na.rm=TRUE),
+#   #             vcmax = mean(vcmax,na.rm=TRUE),
+#   #             ns_star = mean(ns_star,na.rm=TRUE),
+#   #             cost_e = ns_star*e/a,
+#   #             cost_vcmax = 146*vcmax/a,
+#   #             cost =  cost_e + cost_vcmax) %>% ungroup()
+#   cost_df <- data.frame(
+#     timestamp = df$timestamp,
+#     ppfd = df$ppfd,
+#     anet = res$assim - res$rd,
+#     rd = res$rd,
+#     a = res$assim,
+#     e = res$e,
+#     vcmax = res$vcmax,
+#     ns_star = res$ns_star,
+#     cost_e =  res$ns_star* res$e/ res$assim,
+#     cost_vcmax = 146* res$vcmax/ res$assim,
+#     cost_aggr =  res$ns_star* res$e/ res$assim + 146* res$vcmax/ res$assim
+#   ) %>% 
+#     filter(ppfd>0)
+#     
+#   
+#   print(paste("Site:",unique(df$Site),"/ leaf width:",
+#               leaf_width,"/ Net assimilation:", mean(cost_df$anet,na.rm=TRUE),
+#               "/ Assimilation:", mean(cost_df$a,na.rm=TRUE),
+#               "/ Rd:", mean(cost_df$rd,na.rm=TRUE),
+#               "/ cost_e:",mean(cost_df$cost_e,na.rm=TRUE),
+#               "/ cost_vcmax:",mean(cost_df$cost_vcmax,na.rm=TRUE),
+#               "/ cost:",mean(cost_df$cost_e, na.rm=TRUE)+mean(cost_df$cost_vcmax, na.rm=TRUE),
+#               "/ cost_aggr:",mean(cost_df$cost_aggr,na.rm=TRUE),
+#               "/ e:", mean(cost_df$e,na.rm=TRUE)))
+#   
+#   (mean(cost_df$cost_e, na.rm=TRUE)+mean(cost_df$cost_vcmax, na.rm=TRUE))
+#   
+# }
+# 
+# 
+# calc_opt_leaf_size <- function(file_site){
+#   
+#   df_site <- read_csv(file=file_site)
+#   df_site <- df_site %>% 
+#     dplyr::rowwise() %>% 
+#     mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+#            timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+#     ungroup()
+#   df_site <- df_site %>% 
+#     mutate(year=lubridate::year(Date)) %>%
+#     filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2010")
+#   opt_2010 <- optim(
+#     par = 0.05,
+#     fn = opt_fn,
+#     lower = 0.0001,
+#     upper = 2,
+#     method = "L-BFGS-B",
+#     control = list(reltol=1e-2, ndeps = 1e-2),
+#     df = df_site
+#   )
+#   
+#   df_site <- read_csv(file=file_site)
+#   df_site <- df_site %>% 
+#     dplyr::rowwise() %>% 
+#     mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+#            timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+#     ungroup()
+#   df_site <- df_site %>% 
+#     mutate(year=lubridate::year(Date)) %>%
+#     filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2011")
+#   opt_2011 <- optim(
+#     par = 0.05,
+#     fn = opt_fn,
+#     lower = 0.0001,
+#     upper = 2,
+#     method = "L-BFGS-B",
+#     control = list(reltol=1e-2, ndeps = 1e-2),
+#     df = df_site
+#   )
+#   
+#   df_site <- read_csv(file=file_site)
+#   df_site <- df_site %>% 
+#     dplyr::rowwise() %>% 
+#     mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+#            timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+#     ungroup()
+#   df_site <- df_site %>% 
+#     mutate(year=lubridate::year(Date)) %>%
+#     filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2012")
+#   opt_2012 <- optim(
+#     par = 0.05,
+#     fn = opt_fn,
+#     lower = 0.0001,
+#     upper = 2,
+#     method = "L-BFGS-B",
+#     control = list(reltol=1e-2, ndeps = 1e-2),
+#     df = df_site
+#   )
+#   
+#   df_site <- read_csv(file=file_site)
+#   df_site <- df_site %>% 
+#     dplyr::rowwise() %>% 
+#     mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+#            timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+#     ungroup()
+#   df_site <- df_site %>% 
+#     mutate(year=lubridate::year(Date)) %>%
+#     filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2013")
+#   opt_2013 <- optim(
+#     par = 0.05,
+#     fn = opt_fn,
+#     lower = 0.0001,
+#     upper = 2,
+#     method = "L-BFGS-B",
+#     control = list(reltol=1e-2, ndeps = 1e-2),
+#     df = df_site
+#   )
+#   
+#   df_site <- read_csv(file=file_site)
+#   df_site <- df_site %>% 
+#     dplyr::rowwise() %>% 
+#     mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+#            timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+#     ungroup()
+#   df_site <- df_site %>% 
+#     mutate(year=lubridate::year(Date)) %>%
+#     filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2014")
+#   opt_2014 <- optim(
+#     par = 0.05,
+#     fn = opt_fn,
+#     lower = 0.0001,
+#     upper = 2,
+#     method = "L-BFGS-B",
+#     control = list(reltol=1e-2, ndeps = 1e-2),
+#     df = df_site
+#   )
+#   
+#   df_site <- read_csv(file=file_site)
+#   df_site <- df_site %>% 
+#     dplyr::rowwise() %>% 
+#     mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+#            timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+#     ungroup()
+#   df_site <- df_site %>% 
+#     mutate(year=lubridate::year(Date)) %>%
+#     filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2015")
+#   opt_2015 <- optim(
+#     par = 0.05,
+#     fn = opt_fn,
+#     lower = 0.0001,
+#     upper = 2,
+#     method = "L-BFGS-B",
+#     control = list(reltol=1e-2, ndeps = 1e-2),
+#     df = df_site
+#   )
+#   
+#   res_df_2010 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
+#                         leaf_width = opt_2010$par,
+#                         anet = opt_2010$value,
+#                         year = 2010)
+#   
+#   res_df_2011 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
+#                         leaf_width = opt_2011$par,
+#                         anet = opt_2011$value,
+#                         year = 2011)
+#   
+#   res_df_2012 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
+#                         leaf_width = opt_2012$par,
+#                         anet = opt_2012$value,
+#                         year = 2012)
+#   
+#   res_df_2013 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
+#                         leaf_width = opt_2013$par,
+#                         anet = opt_2013$value,
+#                         year = 2013)
+#   
+#   res_df_2014 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
+#                         leaf_width = opt_2014$par,
+#                         anet = opt_2014$value,
+#                         year = 2014)
+#   
+#   res_df_2015 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
+#                         leaf_width = opt_2015$par,
+#                         anet = opt_2015$value,
+#                         year = 2015)
+#   
+#   res_df <- bind_rows(res_df_2010,res_df_2011,
+#                       res_df_2012,res_df_2013,
+#                       res_df_2014,res_df_2015)
+# 
+#   write.csv(res_df,file=paste0('R/data/results_01/',unique(res_df$Site),".csv"))
+#   return(res_df)
+# }
+# 
+# 
+# # calc_opt_leaf_size(filenames[547])
+# envir_vars<-as.character(ls())
+# 
+# 
+# library(doSNOW)
+# cl <- makeCluster(36,'SOCK')
+# registerDoSNOW(cl)
+# snow::clusterEvalQ(cl,lapply(c('bigleaf','zoo','tidyverse'), library, character.only = TRUE))
+# snow::clusterExport(cl, list=envir_vars,envir=environment())
+# obs_tsfs<-snow::clusterMap(cl = cl, fun=calc_opt_leaf_size,file_site=filenames)
+# save(obs_tsfs,file='R/data/results_opt_leaf_01.RData')
+# stopCluster(cl)
+
+
+
+
+########################################################################
+# 02. SIMULATIONS BY LEAF SIZE PERCENTILE
+########################################################################
+
+
+
+calc_rpmodel_lt <- function(file_site){
   
-  # cost_df <- data.frame(
-  #   timestamp = df$timestamp,
-  #   ppfd = df$ppfd,
-  #   anet = res$assim - res$rd,
-  #   rd = res$rd,
-  #   a = res$assim,
-  #   e = res$e,
-  #   vcmax = res$vcmax,
-  #   ns_star = res$ns_star
-  #   ) %>% 
-  #   filter(ppfd>0) %>% 
-  #   mutate(MONTH = lubridate::month(timestamp)) %>%
-  #   group_by(MONTH) %>%
-  #   summarise(anet = mean(anet,na.rm=TRUE),
-  #             rd = mean(rd,na.rm=TRUE),
-  #             a = mean(a,na.rm=TRUE),
-  #             e = mean(e,na.rm=TRUE),
-  #             vcmax = mean(vcmax,na.rm=TRUE),
-  #             ns_star = mean(ns_star,na.rm=TRUE),
-  #             cost_e = ns_star*e/a,
-  #             cost_vcmax = 146*vcmax/a,
-  #             cost =  cost_e + cost_vcmax) %>% ungroup()
-  cost_df <- data.frame(
-    timestamp = df$timestamp,
-    ppfd = df$ppfd,
-    anet = res$assim - res$rd,
-    rd = res$rd,
-    a = res$assim,
-    e = res$e,
-    vcmax = res$vcmax,
-    ns_star = res$ns_star,
-    cost_e =  res$ns_star* res$e/ res$assim,
-    cost_vcmax = 146* res$vcmax/ res$assim,
-    cost_aggr =  res$ns_star* res$e/ res$assim + 146* res$vcmax/ res$assim
-  ) %>% 
-    filter(ppfd>0)
-    
+  df <- read_csv(file=file_site)
+  df <- df %>% 
+    dplyr::rowwise() %>% 
+    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
+           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
+    ungroup() %>% 
+    filter(!is.na(LAI),!is.na(FAPAR))
   
-  print(paste("Site:",unique(df$Site),"/ leaf width:",
-              leaf_width,"/ Net assimilation:", mean(cost_df$anet,na.rm=TRUE),
-              "/ Assimilation:", mean(cost_df$a,na.rm=TRUE),
-              "/ Rd:", mean(cost_df$rd,na.rm=TRUE),
-              "/ cost_e:",mean(cost_df$cost_e,na.rm=TRUE),
-              "/ cost_vcmax:",mean(cost_df$cost_vcmax,na.rm=TRUE),
-              "/ cost:",mean(cost_df$cost_e, na.rm=TRUE)+mean(cost_df$cost_vcmax, na.rm=TRUE),
-              "/ cost_aggr:",mean(cost_df$cost_aggr,na.rm=TRUE),
-              "/ e:", mean(cost_df$e,na.rm=TRUE)))
+
+  AI = df %>% 
+    mutate(year = lubridate::year(Date)) %>%
+    group_by(year) %>% 
+    summarise(prec = sum(total_precipitation_hourly,na.rm=TRUE),
+              pet = sum(pet,na.rm=TRUE)/24/1000) %>% 
+    ungroup() %>% 
+    summarise(prec = mean(prec,na.rm=TRUE),
+              pet = mean(pet,na.rm=TRUE),
+              AI = pet/prec)
   
-  (mean(cost_df$cost_e, na.rm=TRUE)+mean(cost_df$cost_vcmax, na.rm=TRUE))
-  
+  list('lwidth_05','lwidth_25','lwidth_50','lwidth_75','lwidth_95') %>% 
+    purrr::map(function(x){
+      leaf_width <- df[1,x] %>% as.numeric()
+      res <- rpmodel_subdaily(TIMESTAMP = df$timestamp, tc = df$Tair, vpd = df$vpd,
+                              co2 = df$co2, fapar = df$FAPAR, LAI = df$LAI,
+                              ppfd = df$ppfd, u=df$ws, ustar = NA,# df$Ustar, 
+                              canopy_height = df$veg_height, patm =df$pa, 
+                              elv = df$elev, z = df$veg_height+2, leafwidth = leaf_width, 
+                              netrad = NA, #df$NETRAD,
+                              beta = 146.0, c_cost = 0.41, soilm = df$sm_lim, AI = AI$AI,
+                              do_leaftemp = TRUE,  gb_method = "simple",#Choudhury_1988",
+                              do_acclimation = TRUE, do_soilmstress = TRUE,
+                              upscaling_method = "noon", hour_reference_T = c(10,12,14), 
+                              acclim_days = 15, weighted_accl = TRUE, epsleaf = df$Emis_31, #thermal absorptivity of the leaf
+                              energy_params = list(
+                                ste_bolz = 5.67e-8, #W m^-2 K^-4
+                                cpm = 75.38, #J mol^-1 ºC-1
+                                J_to_mol = 4.6, #Conversion factor from J m-2 s-1 (= W m-2) to umol (quanta) m-2 s-1
+                                frac_PAR = 0.5, #Fraction of incoming solar irradiance that is photosynthetically active radiation (PAR
+                                fanir = 0.35 #Fraction of NIR absorbed
+                              ))
+      
+      res2 <- bind_cols(df,bind_cols(res),tibble(leaf_width=x))
+      write.csv(res2,file=paste0("R/data/df_quantile_results/",unique(df$Site),"_",x,".csv"))
+    })
+
+
 }
 
-
-calc_opt_leaf_size <- function(file_site){
-  
-  df_site <- read_csv(file=file_site)
-  df_site <- df_site %>% 
-    dplyr::rowwise() %>% 
-    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
-           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
-    ungroup()
-  df_site <- df_site %>% 
-    mutate(year=lubridate::year(Date)) %>%
-    filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2010")
-  opt_2010 <- optim(
-    par = 0.05,
-    fn = opt_fn,
-    lower = 0.0001,
-    upper = 2,
-    method = "L-BFGS-B",
-    control = list(reltol=1e-2, ndeps = 1e-2),
-    df = df_site
-  )
-  
-  df_site <- read_csv(file=file_site)
-  df_site <- df_site %>% 
-    dplyr::rowwise() %>% 
-    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
-           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
-    ungroup()
-  df_site <- df_site %>% 
-    mutate(year=lubridate::year(Date)) %>%
-    filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2011")
-  opt_2011 <- optim(
-    par = 0.05,
-    fn = opt_fn,
-    lower = 0.0001,
-    upper = 2,
-    method = "L-BFGS-B",
-    control = list(reltol=1e-2, ndeps = 1e-2),
-    df = df_site
-  )
-  
-  df_site <- read_csv(file=file_site)
-  df_site <- df_site %>% 
-    dplyr::rowwise() %>% 
-    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
-           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
-    ungroup()
-  df_site <- df_site %>% 
-    mutate(year=lubridate::year(Date)) %>%
-    filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2012")
-  opt_2012 <- optim(
-    par = 0.05,
-    fn = opt_fn,
-    lower = 0.0001,
-    upper = 2,
-    method = "L-BFGS-B",
-    control = list(reltol=1e-2, ndeps = 1e-2),
-    df = df_site
-  )
-  
-  df_site <- read_csv(file=file_site)
-  df_site <- df_site %>% 
-    dplyr::rowwise() %>% 
-    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
-           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
-    ungroup()
-  df_site <- df_site %>% 
-    mutate(year=lubridate::year(Date)) %>%
-    filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2013")
-  opt_2013 <- optim(
-    par = 0.05,
-    fn = opt_fn,
-    lower = 0.0001,
-    upper = 2,
-    method = "L-BFGS-B",
-    control = list(reltol=1e-2, ndeps = 1e-2),
-    df = df_site
-  )
-  
-  df_site <- read_csv(file=file_site)
-  df_site <- df_site %>% 
-    dplyr::rowwise() %>% 
-    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
-           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
-    ungroup()
-  df_site <- df_site %>% 
-    mutate(year=lubridate::year(Date)) %>%
-    filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2014")
-  opt_2014 <- optim(
-    par = 0.05,
-    fn = opt_fn,
-    lower = 0.0001,
-    upper = 2,
-    method = "L-BFGS-B",
-    control = list(reltol=1e-2, ndeps = 1e-2),
-    df = df_site
-  )
-  
-  df_site <- read_csv(file=file_site)
-  df_site <- df_site %>% 
-    dplyr::rowwise() %>% 
-    mutate(timestamp=lubridate::with_tz(timestamp,time_zone),
-           timestamp = lubridate::force_tz(timestamp,"GMT")) %>% 
-    ungroup()
-  df_site <- df_site %>% 
-    mutate(year=lubridate::year(Date)) %>%
-    filter(!is.na(FAPAR),!is.na(LAI), as.character(year) == "2015")
-  opt_2015 <- optim(
-    par = 0.05,
-    fn = opt_fn,
-    lower = 0.0001,
-    upper = 2,
-    method = "L-BFGS-B",
-    control = list(reltol=1e-2, ndeps = 1e-2),
-    df = df_site
-  )
-  
-  res_df_2010 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
-                        leaf_width = opt_2010$par,
-                        anet = opt_2010$value,
-                        year = 2010)
-  
-  res_df_2011 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
-                        leaf_width = opt_2011$par,
-                        anet = opt_2011$value,
-                        year = 2011)
-  
-  res_df_2012 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
-                        leaf_width = opt_2012$par,
-                        anet = opt_2012$value,
-                        year = 2012)
-  
-  res_df_2013 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
-                        leaf_width = opt_2013$par,
-                        anet = opt_2013$value,
-                        year = 2013)
-  
-  res_df_2014 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
-                        leaf_width = opt_2014$par,
-                        anet = opt_2014$value,
-                        year = 2014)
-  
-  res_df_2015 <- tibble(Site = gsub("/","_",unique(df_site$Site)),
-                        leaf_width = opt_2015$par,
-                        anet = opt_2015$value,
-                        year = 2015)
-  
-  res_df <- bind_rows(res_df_2010,res_df_2011,
-                      res_df_2012,res_df_2013,
-                      res_df_2014,res_df_2015)
-
-  write.csv(res_df,file=paste0('R/data/results_01/',unique(res_df$Site),".csv"))
-  return(res_df)
-}
+# purrr::map(filenames,calc_rpmodel_lt)
 
 
-# calc_opt_leaf_size(filenames[547])
 envir_vars<-as.character(ls())
 
 
 library(doSNOW)
-cl <- makeCluster(36,'SOCK')
+cl <- makeCluster(100,'SOCK')
 registerDoSNOW(cl)
-snow::clusterEvalQ(cl,lapply(c('bigleaf','zoo','tidyverse'), library, character.only = TRUE))
+snow::clusterEvalQ(cl,lapply(c('bigleaf','zoo','tidyverse','purrr'), library, character.only = TRUE))
 snow::clusterExport(cl, list=envir_vars,envir=environment())
-obs_tsfs<-snow::clusterMap(cl = cl, fun=calc_opt_leaf_size,file_site=filenames)
-save(obs_tsfs,file='R/data/results_opt_leaf_01.RData')
+snow::clusterMap(cl = cl, fun=calc_rpmodel_lt,file_site=filenames)
+# save(obs_tsfs,file='R/data/results_opt_leaf_01.RData')
 stopCluster(cl)
-
-
-

@@ -272,7 +272,7 @@ rpmodel_subdaily <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
     canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, leafwidth = NA, netrad = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
-    beta = 146.0, c_cost = 0.41, soilm = 1.0, meanalpha = 1.0, apar_soilm = 0.0, bpar_soilm = 0.73300,
+    beta = 146.0, c_cost = 0.41, soilm = 1.0, AI = 1.0,
     c4 = FALSE, method_jmaxlim = "wang17",do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
     do_leaftemp = FALSE, gb_method = "Su_2001", do_acclimation = FALSE, epsleaf = 0.96, #thermal absorptivity of the leaf
     energy_params = list(
@@ -403,7 +403,7 @@ rpmodel_subdaily <- function(
     tibble(dataDaily) %>% 
       split(seq(nrow(.))) %>%
       purrr::map_df(function(x){
-        # print(paste("acclimation of", x$TIMESTAMP))
+        print(paste("acclimation of", x$TIMESTAMP))
         res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
                        x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
                        unique(elv), unique(z), leafwidth, x$netrad, kphio, beta, c_cost,
@@ -448,7 +448,7 @@ rpmodel_subdaily <- function(
       split(seq(nrow(.))) %>%
       purrr::map_df(function(x){
         tryCatch({
-          # print(x$TIMESTAMP)
+          print(x$TIMESTAMP)
           rho <- calc_air_density(x$patm, x$tc)  # air density (kg m-3)
           es = exp(34.494-4924.99/(x$tc+237.1))/((x$tc+105)^1.57)
           ea = es - x$vpd
@@ -474,8 +474,9 @@ rpmodel_subdaily <- function(
                                  ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, 
                                  patm = x$patm, ns_star_opt = x$ns_star_opt, 
                                  gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, 
-                                 kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,
-                                 soilmstress = soilmstress, method_jmaxlim = method_jmaxlim,
+                                 kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,  
+                                 vcmax_opt = x$vcmax_opt, jmax_opt = x$jmax_opt,
+                                 soilmstress = x$soilmstress, method_jmaxlim = method_jmaxlim,
                                  c4 = c4, rd_to_vcmax = rd_to_vcmax, 
                                  beta = beta, c_cost = c_cost, 
                                  u = x$u, canopy_height = x$canopy_height,
@@ -509,8 +510,9 @@ rpmodel_subdaily <- function(
                                ca_opt = x$ca_opt, xi = x$xi, xiPa = x$xiPa, 
                                patm = x$patm, ns_star_opt = x$ns_star_opt, 
                                gammastar = x$gammastar, gammastar_opt = x$gammastar_opt, 
-                               kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,
-                               soilmstress = soilmstress, method_jmaxlim = method_jmaxlim,
+                               kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,  
+                               vcmax_opt = x$vcmax_opt, jmax_opt = x$jmax_opt,
+                               soilmstress = x$soilmstress, method_jmaxlim = method_jmaxlim,
                                c4 = c4, rd_to_vcmax = rd_to_vcmax, 
                                beta = beta, c_cost = c_cost, 
                                u = x$u, canopy_height = x$canopy_height,
@@ -550,10 +552,10 @@ rpmodel_subdaily <- function(
     # 7 Calculate acclimated subdaily
     out <- rpmodel_jmax_vcmax(tcleaf=tcleaf, tcleaf_opt = DF$tcleaf_opt, vpd = vpd_new, ppfd = DF$ppfd, ppfd_opt = DF$ppfd_opt,
                               fapar = DF$fapar, fapar_opt = DF$fapar_opt, ca = DF$ca, ca_opt = DF$ca_opt, 
-                              xi = DF$xi, xiPa = DF$xiPa, patm = DF$patm, ns_star_opt = DF$ns_star_opt, 
+                              xi = DF$xi, xiPa = DF$xi_opt, patm = DF$patm, ns_star_opt = DF$ns_star_opt, 
                               gammastar = DF$gammastar, gammastar_opt = DF$gammastar_opt, kmm = DF$kmm, kmm_opt = DF$kmm_opt,
                               kphio = kphio, soilmstress = soilmstress, method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax,
-                              beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI)
+                              beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI, vcmax_opt = DF$vcmax_opt, jmax_opt = DF$jmax_opt)
     
     
     if(do_leaftemp){
@@ -566,6 +568,7 @@ rpmodel_subdaily <- function(
       out$lE <-  tcleaf_new$lE
       out$ust <-  tcleaf_new$ust
       out$tcleaf_dew <- tcleaf_new$tcleaf_dew
+      out$soilmstress <- soilmstress
     }
     
     return(out)
@@ -754,89 +757,11 @@ headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck
 
 
 
-# Function to apply the running mean method on the model inputs 
-# param: data_x_running_mean_t, dataframe to use for the runningMean 
-# param: daily_window, number of days to compute the running mean 
-# param: showMsg (if T shows the function messages)
-# return: data.frame with runningMean output
-# rdname: runningMean
-
-
-# runningMean <- function(data_x_running_mean_t = df, daily_window = 10) {
-#   
-#   unique_hour = sort(unique(data_x_running_mean_t$HOUR))
-#   
-#   data_running_mean_t = data_x_running_mean_t[1,]
-#   
-#   for (cy_hour_ref in unique_hour) {
-#     pos_hour = which(data_x_running_mean_t$HOUR == cy_hour_ref)
-#     
-#     data_x_running_mean = data_x_running_mean_t[pos_hour,]
-#     rm(pos_hour)
-#     # window of time 
-#     lunghezza_finestra = daily_window - 1# remotion of one day since the computation starts from the 1st
-#     data_running_mean = data_x_running_mean[1,]
-#     
-#     for ( ciclo_inizio_mm in seq(2,nrow(data_x_running_mean)) ) {
-#       # definition of positions to compute the running mean by making a counter in reverse
-#       posizioni_rm = (ciclo_inizio_mm - lunghezza_finestra):ciclo_inizio_mm
-#       
-#       pos_meno1 = which(posizioni_rm < 1)
-#       if ( length(pos_meno1) > 0 ) posizioni_rm = posizioni_rm[-1*pos_meno1]
-#       rm(pos_meno1)
-#       
-#       # cycle for computing the mean of the dataset's variables
-#       media_1 = data_x_running_mean[1,]
-#       for ( ciclo_variabili in colnames(media_1) ) {
-#         # dataset creation with values to use
-#         data_1 = data_x_running_mean[posizioni_rm,ciclo_variabili]
-#         if ( !is.numeric(data_1) ) {
-#           media_1[ciclo_variabili] = NA
-#           next
-#         }
-#         # NA remotion
-#         pos_na = which(is.na(data_1) == 1 )
-#         if ( length(pos_na) > 0 ) data_1 = data_1[-1*pos_na]
-#         rm(pos_na)
-#         # if there are missing values it puts NA, otherwise it computes the mean
-#         if ( length(data_1) == 0 ) {
-#           media_1[ciclo_variabili] = NA
-#         } else {
-#           media_1[ciclo_variabili] = mean(data_1)
-#         }
-#         rm(data_1)
-#       }
-#       rm(ciclo_variabili)
-#       media_1$TIMESTAMP = data_x_running_mean$TIMESTAMP[ciclo_inizio_mm]
-#       data_running_mean = rbind(data_running_mean,media_1)
-#       rm(media_1)
-#       rm(posizioni_rm)
-#     }
-#     rm(ciclo_inizio_mm)
-#     rm(lunghezza_finestra)
-#     rm(data_x_running_mean)
-#     data_running_mean_t = rbind(data_running_mean_t,data_running_mean)
-#   }
-#   
-#   data_running_mean_t = data_running_mean_t[-1,]
-#   
-#   # library(lubridate)
-#   # data_running_mean_t$YEAR = year(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-#   # data_running_mean_t$MONTH = month(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-#   # data_running_mean_t$DAY = day(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-#   # data_running_mean_t$HOUR = hour(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-#   # data_running_mean_t$MINUTE = minute(ymd_hm(as.character(data_running_mean_t$TIMESTAMP)))
-#   
-#   data_running_mean_t = data_running_mean_t[order(data_running_mean_t$TIMESTAMP),]
-#   
-#   return(data_running_mean_t)
-# }
-
 
 
 rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xi, xiPa, patm, ns_star_opt,
                                gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim, c4,
-                               rd_to_vcmax, beta, c_cost, leafwidth, LAI){
+                               rd_to_vcmax, beta, c_cost, leafwidth, LAI,vcmax_opt,jmax_opt){
   #---- Fixed parameters--------------------------------------------------------
   c_molmass <- 12.0107  # molecular mass of carbon (g)
   #'
@@ -864,12 +789,12 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     
     
     # OPTIMAL Vcmax
-    vcmax_opt  = phi0_opt * ppfd_opt*fapar_opt *
+    vcmax_opt  = phi0_opt * ppfd_opt*fapar_opt * soilmstress*
       ((ci_opt + kmm_opt) / (ci_opt + 2*gammastar_opt)) *
       sqrt(1 - (c_cost*(ci_opt + 2*gammastar_opt)/(ci_opt - gammastar_opt))^(2/3)) #[umol m-2 s-1]
     
     # OPTIMAL Jmax
-    jmax_opt  = (4 * phi0_opt * ppfd_opt*fapar_opt) / 
+    jmax_opt  = soilmstress*(4 * phi0_opt * ppfd_opt*fapar_opt) / 
       sqrt(1/(1 - (c_cost*( ci_opt + 2*gammastar_opt)/
                      (ci_opt - gammastar_opt))^(2.0/3.0)) - 1) #[umol m-2 s-1]
   
@@ -1065,7 +990,7 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                            ppfd_opt, fapar, fapar_opt, ca, 
                            ca_opt, xi, xiPa, patm, ns_star_opt, 
                            gammastar, gammastar_opt, kmm, 
-                           kmm_opt, kphio, soilmstress, 
+                           kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
                            method_jmaxlim, c4, rd_to_vcmax, 
                            beta, c_cost, u, canopy_height,
                            tc, tk, tkleaf, z, LAI, ustar, netrad, mol_gas_const,
@@ -1078,7 +1003,8 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                                gammastar = gammastar, gammastar_opt = gammastar_opt, kmm = kmm, 
                                kmm_opt = kmm_opt, kphio = kphio, soilmstress = soilmstress, 
                                method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                               beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI)
+                               beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI,
+                               vcmax_opt=vcmax_opt, jmax_opt = jmax_opt)
   
   #Latent Heat Loss calculation
     if(is.na(df_res$gs)){df_res$gs = 0}
