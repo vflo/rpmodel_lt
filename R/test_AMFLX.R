@@ -54,7 +54,11 @@ c(3,6,7,8,9,10,12,13,19,20,21,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,
 67,68,69,70,71,72)
 
 
+<<<<<<< HEAD
 filename <- filenames.fluxnet[10]
+=======
+filename <- filenames.fluxnet[1]
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 fluxnet_data <- data.table::fread(filename, header = T, 
                                   quote = "\"", sep = ",", na.strings = c("NA", "-9999"), 
                                   colClasses = "numeric", integer64 = "character")
@@ -64,9 +68,15 @@ data_flx_pre <- fluxnet_data %>%
   cbind(site = site) %>% 
   mutate(timestamp = lubridate::ymd_hms(DateTime)) %>% 
   left_join(sites_metadata) 
+<<<<<<< HEAD
 
 data_flx_pre %>% ggplot(aes(Tair,Tcan))+geom_point()
 
+=======
+
+data_flx_pre %>% ggplot(aes(Tair,Tcan))+geom_point()
+
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 
 
 
@@ -216,7 +226,10 @@ df_res_HA %>%
          hour = lubridate::hour(timestamp),
          month = lubridate::month(timestamp)) %>% 
   pivot_longer(c(d_can_air,d_can_leaf)) %>%
+<<<<<<< HEAD
   dplyr::select(hour,value,name, month) %>% 
+=======
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
   ggplot() +
   geom_abline(slope=0,intercept=0,linetype=2)+
   geom_smooth(mapping = aes(hour,value, color=name),linewidth = 1 )+
@@ -1189,6 +1202,7 @@ plot.eval.dens(df_res_WR$tcleaf,df_res_WR$Tcan)
 #           common.legend = TRUE
 # )
 # 
+<<<<<<< HEAD
 
 
 
@@ -1317,6 +1331,8 @@ res_original_Ic <- rpmodel_core(
   verbose = FALSE 
 )
 
+=======
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 
 df_res <- as_data_frame(res) %>% 
   cbind(as_data_frame(res_original),

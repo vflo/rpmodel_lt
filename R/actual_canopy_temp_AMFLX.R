@@ -16,13 +16,18 @@ if(!require(devtools)){install.packages("devtools")}
 sapply(list("R/rpmodel_core.R","R/rpmodel.R","R/rpmodel_subdaily.R",
             "R/subroutines.R","R/include_fapar_lai.R","R/include_albedo.R"),source,.GlobalEnv)
 library(MASS)
+<<<<<<< HEAD
 library(ggfx)
+=======
+library(ggplot2)
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 library(viridis)
 library(Metrics)
 library(sf)
 library(R.utils)
 library(rsplashtest)
 source("R/evaluation_sim_plot.R")
+<<<<<<< HEAD
 
 library(lme4)
 library(lmerTest)
@@ -59,6 +64,8 @@ accuracy_tune <- function(fit) {
   accuracy_Test
 }
 
+=======
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 get_density <- function(x, y, ...) {
   dens <- MASS::kde2d(x, y, ...)
   ix <- findInterval(x, dens$x)
@@ -292,7 +299,11 @@ fapar_noaa <- read.csv(file="R/data/FAPAR_sites_noaa.csv")
 
 
 
+<<<<<<< HEAD
 precip_ERA5 <- read_csv(path="R/data/ERA_values_prec_amf.csv")%>% 
+=======
+precip_ERA5 <- read_csv(path="R/data/ERA_values_prec_amf.csv$")%>% 
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
   dplyr::select(-c(`system:index`,.geo, Hour)) %>% 
   na.omit()
 
@@ -1282,6 +1293,7 @@ plot.eval.dens(df_res_WR$tcleaf,df_res_WR$Tcan)
 
 
 ######################################
+<<<<<<< HEAD
 
 
 
@@ -1293,6 +1305,33 @@ plot.eval.dens(df_res_WR$tcleaf,df_res_WR$Tcan)
 
 
 
+=======
+library(lme4)
+library(lmerTest)
+library(relaimpo)
+library(DAAG)
+library(party)
+library(rpart)
+library(rpart.plot)
+library(mlbench)
+library(caret)
+library(pROC)
+library(tree)
+library(ggplot2)
+library(ggpubr)
+
+create_train_test <- function(data, size = 0.8) {
+  ind <- sample(2, nrow(data), replace = T, prob = c(size, 1-size))
+    return (list(data[ind == 1, ],data[ind == 2, ]))
+}
+
+accuracy_tune <- function(fit) {
+  predict_unseen <- predict(fit, data_test, type = 'class')
+  table_mat <- table(data_test$cat_zero, predict_unseen)
+  accuracy_Test <- sum(diag(table_mat)) / sum(table_mat)
+  accuracy_Test
+}
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 
 
 #### ALL ####
@@ -1355,6 +1394,7 @@ list(3,6,7,8,9,10,12,13,19,20,21,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,
       mutate(timestamp = lubridate::ymd_hms(DateTime)) %>% 
       left_join(sites_metadata) 
     
+<<<<<<< HEAD
     if(unique(data_flx_pre$IGBP) %in% c("ENF","DBF")){
       data_flx_pre <- include_fapar_lai(data_flx_pre,fapar_noaa,fapar)
       
@@ -1410,18 +1450,39 @@ gc()
 set.seed(1234)
 
 df %>% 
+=======
+    data_flx_pre <- include_fapar_lai(data_flx_pre,fapar_noaa,fapar)
+    
+    return(data_flx_pre)
+    
+  }) %>% bind_rows() -> df
+
+df %>% dplyr::select(site,IGBP) %>% unique()
+
+df2 <- df %>% 
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
   filter(LAI >= 1, Tcan > 0, Tcan < 70, PPFD>=25, IGBP %in% c("DBF","ENF"#,"MF","EBF"
                                                               )) %>%
   # drop_na(PPFD,CO2,Tair,FAPAR,VPD,WS,LAI,Tcan, Ustar,LE,SWC) %>% 
   mutate(VPD_leaf_calc = calc_new_vpd(Tcan,Tair,VPD*100),
          GPP = case_when(GPP<0~0,
+<<<<<<< HEAD
                          TRUE~GPP)) %>%
+=======
+                         TRUE~GPP))
+df2 %>% dplyr::select(site,IGBP) %>% unique()
+
+set.seed(1234)
+
+df2 %>%
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
   mutate(d_can_air = Tcan-Tair,
          VPD = VPD*100,
          hour = lubridate::hour(timestamp) %>% as.numeric,
          month = lubridate::month(timestamp),
          cat_zero = case_when(d_can_air<0~"<0",
                               TRUE~'>=0'),
+<<<<<<< HEAD
          cat_zero = as.factor(cat_zero),
          EF=LE/NETRAD) %>%
   dplyr::select(LE,WS,VPD,CO2,IGBP,
@@ -1430,6 +1491,11 @@ df %>%
                 Ustar,
                 # elev,
                 FAPAR,P,rH,SWC,
+=======
+         cat_zero = as.factor(cat_zero)) %>%
+  dplyr::select(LE,WS,VPD,CO2,IGBP,
+                Tair,LAI,PPFD,MAT,MAP,z,Ustar,elev,FAPAR,P,rH,SWC,
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
                 GPP,#VPD_leaf_calc,
                 cat_zero) ->faa2
 
@@ -1441,11 +1507,16 @@ dim(data_train2)
 fit2 <- rpart(cat_zero~., data = data_train2, method = 'class',
               control = list(minsplit = 500, xval = 20, maxdepth = 5))
 p <- predict(fit2, data_test2, type = "class")
+<<<<<<< HEAD
 rpart.plot(fit2,type = 2,box.palette = "Grays",branch = 1,cex=1,compress=TRUE)
+=======
+rpart.plot(fit2,type = 2,box.palette = "Grays")
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 # plotcp(fit2)
 # printcp(fit)
 # rpart.rules(fit2)
 caret::confusionMatrix(p, reference= data_test2$cat_zero, positive='>=0')
+<<<<<<< HEAD
 # 
 # 
 # df %>% 
@@ -1495,6 +1566,8 @@ caret::confusionMatrix(p, reference= data_test2$cat_zero, positive='>=0')
 
 
 
+=======
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 
 
 
@@ -1503,11 +1576,16 @@ caret::confusionMatrix(p, reference= data_test2$cat_zero, positive='>=0')
 
 
 #### Models DeltaT ####
+<<<<<<< HEAD
 faa3 <- df %>% 
+=======
+df %>% 
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
   filter(LAI >= 1, Tcan > 0, Tcan < 70, IGBP %in% c("DBF","ENF"#,"MF","EBF"
   )) %>%
   mutate(d_can_air = Tcan-Tair,
          VPD = VPD*100,
+<<<<<<< HEAD
          VPD_leaf_calc = calc_new_vpd(Tcan,Tair,VPD),
          hour = lubridate::hour(timestamp) %>% as.numeric,
          month = lubridate::month(timestamp),
@@ -2148,6 +2226,15 @@ anova(mod_p)
 
 
 #### sub daily trends ####
+=======
+         hour = lubridate::hour(timestamp) %>% as.numeric,
+         month = lubridate::month(timestamp))->faa3
+mod <- lmer(d_can_air~(VPD+WS+PPFD+elev+LAI+rH+SWC)*IGBP+(1|site),data=faa3)
+summary(mod)
+MuMIn::r.squaredGLMM(mod)
+
+
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
 #geom_smooth with random effect (https://gist.github.com/richardbeare/b679c38dcb644ec50ea34ac061200504)
 predictdf.gam <- function(model, xseq, se, level) {
   olddata <- model.frame(model)
@@ -2202,6 +2289,7 @@ df %>%
         strip.background = element_rect(fill="white"),
         legend.position="top")+
   NULL
+<<<<<<< HEAD
 
 
 p1 <- df %>%
@@ -2819,3 +2907,5 @@ p4 <- data.frame(gs=input_deltaT$Var2,Rs=input_deltaT$Var1,Tkair = Tkair) %>%
 
 ggarrange(p1,p2,p3,p4,labels = c("a","b","c","d"),ncol = 2,nrow=2,
           common.legend = TRUE,legend ="top" )
+=======
+>>>>>>> aada352b0b74d0b4832b24ee9e2235367baf534b
