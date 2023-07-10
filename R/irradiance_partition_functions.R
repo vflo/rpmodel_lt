@@ -6,6 +6,10 @@ irradiance_partition <- function(sun_shade = c("sun","shade"), TIMESTAMP, PPFD, 
   new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
   if(length(new.packages)) install.packages(new.packages)
   
+  stopifnot("TIMESTAMP must be a POSIXct, POSIXtl or a Date object" = all(lubridate::is.instant(TIMESTAMP)))
+  if(any(PA <10000)) warning("Check if PA is in Pascal")
+  if(any(PPFD > 3000)) warning("Check if PPFD is in micromol m-2 s-1")
+  
   #Solar elevation angle
   DOY <- lubridate::yday(TIMESTAMP)
   hour <- lubridate::hour(TIMESTAMP)
@@ -38,10 +42,12 @@ irradiance_partition <- function(sun_shade = c("sun","shade"), TIMESTAMP, PPFD, 
   #Irradiance sun exposed
   I_c = (1-rho_cb)*I_b*(1-exp(-kb_prime*LAI))+(1-rho_cd)*I_d*(1-exp(-kd_prime*LAI))
   
-  Isun = I_b*(1-canopy_reflexion)*(1-exp(-kb*LAI))+
-    I_d*(1-rho_cd)*(1-exp(-(kd_prime+kb)*LAI))*kd_prime/(kd_prime+kb)+
-    I_b*((1-rho_cb)*(1-exp(-(kb_prime+kb)*LAI))*kb_prime/(kb_prime+kb) - 
-           (1-canopy_reflexion)*(1-exp(-2*kb*LAI))/2)
+  a = I_b*(1-canopy_reflexion)*(1-exp(-kb*LAI))
+  b = I_d*(1-rho_cd)*(1-exp(-(kd_prime+kb)*LAI))*kd_prime/(kd_prime+kb)
+  c = I_b*(((1-rho_cb)*(1-exp(-(kb_prime+kb)*LAI))*(kb_prime/(kb_prime+kb)))-
+            (1-canopy_reflexion)*((1-exp(-2*kb*LAI)))/2)
+  
+  Isun = a+b+c
   
   Ishade = I_c-Isun
   
