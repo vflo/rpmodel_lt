@@ -1,25 +1,15 @@
-Package: rpmodel
+Package: rpmodellt
 Type: Package
-Title: P-Model
-Description: Implements the P-model 
-  (Stocker et al., 2020 <doi:10.5194/gmd-13-1545-2020>),
-  predicting acclimated parameters of the enzyme kinetics of C3 photosynthesis,
-  assimilation, and dark respiration rates as a function of the environment
-  (temperature, CO2, vapour pressure deficit, light, atmospheric pressure).
-Version: 1.2.2
+Title: P-Model sub-daily leaf temperature
+Description: Implements the P-model sub daily with leaf temperature 
+Version: 0.0.1
 Authors@R: c(
             person(
-              family = "Stocker",
-              given = "Benjamin",
-              email = "benjamin.stocker@gmail.com",
-              comment = c(ORCID = "0000-0002-5070-8109"),
-              role = c("aut", "cre")),
-            person(
-               family = "Hufkens",
-               given = "Koen",
-               email = "koen.hufkens@gmail.com",
-               role = c("ctb"),
-               comment = c(ORCID = "0000-0002-5070-8109"))
+              family = "Victor",
+              given = "Flo",
+              email = "vflosierra@gmail.com",
+              comment = c(ORCID = "0000-0003-1908-4577"),
+              role = c("aut", "cre"))
            )
 License: GPL-3
 Encoding: UTF-8
@@ -36,5 +26,5 @@ Suggests:
     covr,
     markdown
 VignetteBuilder: knitr
-URL: https://github.com/computationales/rpmodel
-BugReports: https://github.com/computationales/rpmodel/issues
+URL: https://github.com/vflo/rpmodel_lt
+BugReports: https://github.com/vflo/rpmodel_lt/issues

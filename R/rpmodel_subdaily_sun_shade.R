@@ -271,7 +271,7 @@
 rpmodel_subdaily_sun_shade <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd_sun, ppfd_shade, u = NA, ustar = NA,#wind speed in m s^-1
     canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, lat = NA, long= NA,
-    leafwidth = NA, netrad = NA,
+    leafwidth = NA, netrad = NA, ga = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, AI = 1.0,
     c4 = FALSE, method_jmaxlim = "wang17",do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
@@ -394,6 +394,7 @@ rpmodel_subdaily_sun_shade <- function(
                    ustar = ustar,
                    z = z,
                    netrad = netrad,
+                   ga = ga,
                    LAI = LAI,
                    canopy_height = canopy_height,
                    patm = patm,
@@ -553,7 +554,7 @@ rpmodel_subdaily_sun_shade <- function(
                                    u = x$u, canopy_height = x$canopy_height,
                                    tc = tcleaf_root_sun, tk = tk_sun, tkleaf = tkleaf_shade, 
                                    z = x$z, LAI = x$LAI, ustar = x$ustar, 
-                                   netrad = x$netrad,
+                                   netrad = x$netrad, ga = x$ga,
                                    mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                    lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                    sigma = sigma, cpm = cpm, CP = CP, rho = rho,
@@ -568,7 +569,7 @@ rpmodel_subdaily_sun_shade <- function(
             },
             interval=c(tcleaf_dew_shade, tcleaf_root_sun+30))$minimum
 
-            EB <- energy_balance_2layers(tcleaf=tcleaf_root_sun, tcleaf_opt = x$tcleaf_sun_opt, 
+            EB <- energy_balance_2layers(tcleaf_sun=tcleaf_root_sun, tcleaf_opt = x$tcleaf_sun_opt, 
                                          tcleaf_shade = tcleaf_new_shade, 
                                          tkleaf_shade = tcleaf_new_shade + 273.15,
                                          vpd = vpd_new_sun, ppfd = x$ppfd_sun, ppfd_opt = x$ppfd_sun_sun_opt, 
@@ -583,7 +584,7 @@ rpmodel_subdaily_sun_shade <- function(
                                          beta = beta, c_cost = c_cost, 
                                          u = x$u, canopy_height = x$canopy_height,
                                          tc = x$tc, tk = tk, tkleaf = tkleaf_sun, 
-                                         z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+                                         z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad, ga = x$ga,
                                          mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                          lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                          sigma = sigma, cpm = cpm, CP = CP, rho = rho,
@@ -630,7 +631,7 @@ rpmodel_subdaily_sun_shade <- function(
                                        u = x$u, canopy_height = x$canopy_height,
                                        tc = tcleaf_new_sun, tk = tk_sun, tkleaf = tkleaf_shade, 
                                        z = x$z, LAI = x$LAI, ustar = x$ustar, 
-                                       netrad = x$netrad,
+                                       netrad = x$netrad, ga = x$ga,
                                        mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                        lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                        sigma = sigma, cpm = cpm, CP = CP, rho = rho,
@@ -643,9 +644,36 @@ rpmodel_subdaily_sun_shade <- function(
             #final balance
             (Rnet_shade - EB_shade$Qc - EB_shade$lE)^2
           },
-          interval=c(tcleaf_dew_shade, tcleaf_root_sun+30))$minimum
+          interval=c(tcleaf_dew_shade, tcleaf_new_sun+30))$minimum
           
-          EB <- energy_balance_2layers(tcleaf=tcleaf_new_sun, tcleaf_opt = x$tcleaf_sun_opt, 
+          tkleaf_shade = tcleaf_new_shade+273.15
+          ei_shade = exp(34.494-4924.99/(tcleaf_new_shade+237.1))/((tcleaf_new_shade+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
+          vpd_new_shade = (ei_shade - ea_shade)
+          vpd_new_shade = ifelse(vpd_new_shade<0,0,vpd_new_shade)
+          
+          EB_shade <- energy_balance(tcleaf=tcleaf_new_shade, tcleaf_opt = x$tcleaf_shade_opt, 
+                                     vpd = vpd_new_shade, ppfd = x$ppfd_shade, ppfd_opt = x$ppfd_shade_shade_opt, 
+                                     fapar = x$fapar, fapar_opt = x$fapar_shade_opt, ca = x$ca_shade, 
+                                     ca_opt = x$ca_shade_opt, xi = x$xi_shade, xiPa = x$xiPa_shade, 
+                                     patm = x$patm, ns_star_opt = x$ns_star_shade_opt, 
+                                     gammastar = x$gammastar_shade, gammastar_opt = x$gammastar_shade_opt, 
+                                     kmm = x$kmm, kmm_opt = x$kmm_shade_opt, kphio = kphio,  
+                                     vcmax_opt = x$vcmax_shade_opt, jmax_opt = x$jmax_shade_opt,
+                                     soilmstress = x$soilmstress, method_jmaxlim = method_jmaxlim,
+                                     c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                                     beta = beta, c_cost = c_cost, 
+                                     u = x$u, canopy_height = x$canopy_height,
+                                     tc = tcleaf_new_sun, tk = tk_sun, tkleaf = tkleaf_shade, 
+                                     z = x$z, LAI = x$LAI, ustar = x$ustar, 
+                                     netrad = x$netrad, ga = x$ga,
+                                     mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
+                                     lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
+                                     sigma = sigma, cpm = cpm, CP = CP, rho = rho,
+                                     epsleaf = x$epsleaf, epssky = epssky, frac_PAR = frac_PAR, 
+                                     fanir = fanir, ei = ei_shade, ea = ea_shade, gb_method = gb_method, 
+                                     leafwidth = leafwidth)
+          
+          EB <- energy_balance_2layers(tcleaf_sun=tcleaf_new_sun, tcleaf_opt = x$tcleaf_sun_opt, 
                                        tcleaf_shade = tcleaf_new_shade, 
                                        tkleaf_shade = tcleaf_new_shade + 273.15,
                                        vpd = vpd_new_sun, ppfd = x$ppfd_sun, ppfd_opt = x$ppfd_sun_sun_opt, 
@@ -660,7 +688,7 @@ rpmodel_subdaily_sun_shade <- function(
                                        beta = beta, c_cost = c_cost, 
                                        u = x$u, canopy_height = x$canopy_height,
                                        tc = x$tc, tk = tk, tkleaf = tkleaf_sun, 
-                                       z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+                                       z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad, ga = x$ga,
                                        mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                        lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                        sigma = sigma, cpm = cpm, CP = CP, rho = rho,
@@ -669,14 +697,14 @@ rpmodel_subdaily_sun_shade <- function(
                                        leafwidth = leafwidth)
 
         return(tibble(tcleaf_sun=tcleaf_new_sun, tcleaf_shade = tcleaf_new_shade,
-                      tcleaf_dew = tcleaf_dew, lE = EB$lE, Qc_sun = EB$Qc, 
-                      Qc_shade = EB$Qc_shade, Qtir_sky = EB$Qtir_sky, 
+                      tcleaf_dew = tcleaf_dew, lE_sun = EB$lE, lE_shade = EB_shade$lE,
+                      Qc_sun = EB$Qc, Qc_shade = EB$Qc_shade, Qtir_sky = EB$Qtir_sky, 
                       Qtirleaf_sky = EB$Qtirleaf_sky, Qtirleaf_shade = EB$Qtirleaf_shade,
                       Qtirleaf_down = EB$Qtirleaf_down, gb = EB$gb, ust = EB$ust))
           },
         error= function(e){
           return(tibble(tcleaf_sun=x$tc, tcleaf_shade = NA,
-                        tcleaf_dew = NA, lE = NA, Qc_sun = NA, 
+                        tcleaf_dew = NA, lE_sun = NA, le_shade = NA, Qc_sun = NA, 
                         Qc_shade = NA, Qtir = NA, 
                         Qtirleaf_sky = NA, Qtirleaf_shade = NA,
                         Qtirleaf_down = NA, gb = NA, ust = NA))
@@ -696,8 +724,8 @@ rpmodel_subdaily_sun_shade <- function(
     es_shade = exp(34.494-4924.99/(tcleaf_sun+237.1))/((tcleaf_sun+105)^1.57)
     ea_shade = es_shade - vpd_new_sun
     tcleaf_dew_shade <- tkleaf_sun/(1-17.27^(-1)*log(ea_shade/es_shade))-273.15
-    tkleaf_shade = tcleaf_new_shade+273.15
-    ei_shade = exp(34.494-4924.99/(tcleaf_new_shade+237.1))/((tcleaf_new_shade+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
+    tkleaf_shade = tcleaf_shade+273.15
+    ei_shade = exp(34.494-4924.99/(tcleaf_shade+237.1))/((tcleaf_shade+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
     vpd_new_shade = (ei_shade - ea_shade)
     vpd_new_shade = ifelse(vpd_new_shade<0,0,vpd_new_shade)
     
@@ -1157,7 +1185,6 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     jmax            = jmaxAdjusted,
     vcmax25         = vcmax25,
     rd              = rd,
-    tcleaf          = tcleaf,
     vpd_leaf        = vpd,
     ns_star         = ns_star
   )
@@ -1176,7 +1203,7 @@ energy_balance_2layers <- function(tcleaf_sun, tcleaf_opt, tcleaf_shade,
                                   kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
                                   method_jmaxlim, c4, rd_to_vcmax, 
                                   beta, c_cost, u, canopy_height,
-                                  tc, tk, tkleaf_sun, z, LAI, ustar, netrad, mol_gas_const,
+                                  tc, tk, tkleaf_sun, z, LAI, ustar, netrad, ga, mol_gas_const,
                                   J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
                                   epsleaf, epssky, frac_PAR, fanir, ei, ea, gb_method, 
                                   leafwidth){
@@ -1203,11 +1230,15 @@ energy_balance_2layers <- function(tcleaf_sun, tcleaf_opt, tcleaf_shade,
     }
   
   # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
-
-    gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_sun,
-                 tc, z, LAI, patm,mol_gas_const, rho, tk, gb_method, leafwidth) 
+    if(is.na(ga)){
+      gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_sun,
+                   tc, z, LAI, patm,mol_gas_const, rho, tk, gb_method, leafwidth) 
+      gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+    }else{
+      gbh = ga
+      gb = gbh/0.92
+    }
     gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
-    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
     gbs = gs * gb/(gs + gb)
   
     E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
@@ -1235,14 +1266,15 @@ energy_balance_2layers <- function(tcleaf_sun, tcleaf_opt, tcleaf_shade,
     Qtirleaf_down = epsleaf*sigma*tkleaf_sun^4
     
   #Convective Heat Exchange shade to sun
-    Qc_shade = gbh*cpm*(tcleaf_shade-tcleaf_sun)
+    cp_vol = CP*rho
+    Qc_shade = gbh*cp_vol*(tcleaf_shade-tcleaf_sun)
     if(Qc_shade<0){Qc_shade <- 0}  
   
   #Net radiation
     Rnet = Qsw + Qtir_sky + Qtirleaf_shade - Qtirleaf_sky - Qtirleaf_down
 
   #Convective Heat Exchange
-    Qc = gbh*cpm*(tcleaf_sun-tc)
+    Qc = gbh*cp_vol*(tcleaf_sun-tc)
   
   
   return(tibble(Rnet, lE, Qc, Qc_shade, Qtir_sky, Qtirleaf_sky, Qtirleaf_shade,
@@ -1259,7 +1291,7 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                            kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
                            method_jmaxlim, c4, rd_to_vcmax, 
                            beta, c_cost, u, canopy_height,
-                           tc, tk, tkleaf, z, LAI, ustar, netrad, mol_gas_const,
+                           tc, tk, tkleaf, z, LAI, ustar, netrad, ga, mol_gas_const,
                            J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
                            epsleaf, epssky, frac_PAR, fanir, ei, ea, gb_method, 
                            leafwidth){
@@ -1287,10 +1319,15 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
   
   # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
   
-  gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
-               tc, z, LAI, patm,mol_gas_const, rho, tk, gb_method, leafwidth) 
+  if(is.na(ga)){
+    gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
+                 tc, z, LAI, patm, mol_gas_const, rho, tk, gb_method, leafwidth) 
+    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+  }else{
+    gbh = ga
+    gb = gbh/0.92
+  }
   gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
-  gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
   gbs = gs * gb/(gs + gb)
   
   E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
@@ -1314,7 +1351,8 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
   Rnet = Qsw + Qtir - Qtirleaf
   
   #Convective Heat Exchange
-  Qc = gbh*cpm*(tcleaf_root-tc)
+  cp_vol = CP*rho
+  Qc = gbh*cp_vol*(tcleaf_root-tc)
   
   
   return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))

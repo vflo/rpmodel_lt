@@ -270,10 +270,10 @@
 #'
 rpmodel_subdaily <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
-    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, leafwidth = NA, netrad = NA,
+    canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, leafwidth = NA, netrad = NA, ga = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
     beta = 146.0, c_cost = 0.41, soilm = 1.0, AI = 1.0,
-    c4 = FALSE, method_jmaxlim = "wang17",do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
+    c4 = FALSE, method_jmaxlim = "wang17", do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
     do_leaftemp = FALSE, gb_method = "Su_2001", do_acclimation = FALSE, epsleaf = 0.96, #thermal absorptivity of the leaf
     energy_params = list(
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -372,6 +372,7 @@ rpmodel_subdaily <- function(
                    ustar = ustar,
                    z = z,
                    netrad = netrad,
+                   ga = ga,
                    LAI = LAI,
                    canopy_height = canopy_height,
                    patm = patm,
@@ -481,7 +482,7 @@ rpmodel_subdaily <- function(
                                  beta = beta, c_cost = c_cost, 
                                  u = x$u, canopy_height = x$canopy_height,
                                  tc = x$tc, tk = tk, tkleaf = tkleaf, 
-                                 z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+                                 z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad, ga = x$ga,
                                  mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                  lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                  sigma = sigma, cpm = cpm, CP = CP, rho = rho,
@@ -517,7 +518,7 @@ rpmodel_subdaily <- function(
                                beta = beta, c_cost = c_cost, 
                                u = x$u, canopy_height = x$canopy_height,
                                tc = x$tc, tk = tk, tkleaf = tkleaf, 
-                               z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad,
+                               z = x$z, LAI = x$LAI, ustar = x$ustar, netrad = x$netrad, ga = x$ga,
                                mol_gas_const =  mol_gas_const, J_to_mol = J_to_mol, 
                                lat_heat = lat_heat, mol_mas_wv = mol_mas_wv, 
                                sigma = sigma, cpm = cpm, CP = CP, rho = rho,
@@ -559,6 +560,7 @@ rpmodel_subdaily <- function(
     
     
     if(do_leaftemp){
+      out$tcleaf <- tcleaf
       out$Q_tcleaf <-  tcleaf_new$Q_tcleaf_new
       out$Qc <-  tcleaf_new$Qc
       out$Rnet <-  tcleaf_new$Rnet
@@ -975,7 +977,6 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     jmax            = jmaxAdjusted,
     vcmax25         = vcmax25,
     rd              = rd,
-    tcleaf          = tcleaf,
     vpd_leaf        = vpd,
     ns_star         = ns_star
   )
@@ -993,7 +994,7 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                            kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
                            method_jmaxlim, c4, rd_to_vcmax, 
                            beta, c_cost, u, canopy_height,
-                           tc, tk, tkleaf, z, LAI, ustar, netrad, mol_gas_const,
+                           tc, tk, tkleaf, z, LAI, ustar, netrad, ga, mol_gas_const,
                            J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
                            epsleaf, epssky, frac_PAR, fanir, ei, ea, gb_method, 
                            leafwidth){
@@ -1021,10 +1022,15 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
   
   # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
 
-    gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
-                 tc, z, LAI, patm,mol_gas_const, rho, tk, gb_method, leafwidth) 
+    if(is.na(ga)){
+      gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
+                   tc, z, LAI, patm,mol_gas_const, rho, tk, gb_method, leafwidth) 
+      gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+    }else{
+      gbh = ga
+      gb = gbh/0.92
+    }
     gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
-    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
     gbs = gs * gb/(gs + gb)
   
     E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
@@ -1048,7 +1054,8 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
     Rnet = Qsw + Qtir - Qtirleaf
 
   #Convective Heat Exchange
-    Qc = gbh*cpm*(tcleaf_root-tc)
+    cp_vol = CP*rho
+    Qc = gbh* cp_vol*(tcleaf_root-tc)
   
   
   return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))

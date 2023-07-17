@@ -1177,8 +1177,8 @@ calc_ga <- function(ws, ust, canopy_height, tcleaf_root,
           }
           
         }
-      
-      Hs_new = Ga*0.92*cpm*(tcleaf_root-Ta)
+      cp_vol = CP * rho
+      Hs_new = Ga*0.92*cp_vol*(tcleaf_root-Ta)
       if(counter == 100){
         Hs_new <-  Hs
         Ga=1/(1/(GbN2)+1/(GaM))
