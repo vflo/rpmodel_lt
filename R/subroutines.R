@@ -1219,9 +1219,6 @@ calc_air_density <- function(patm, tc){
 
 
 
-
-
-
 calc_soilmstress <- function(
     soilm,
     AI = 1

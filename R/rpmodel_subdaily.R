@@ -850,7 +850,7 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     kappa <- kmm / ca
 
     ## use chi for calculating mj
-    mj <- (chi_inst - gamma)/(chi_inst + kappa)
+    mj <- (chi - gamma) / (chi + 2.0 * gamma)
 
     ## mc
     mc <- (chi_inst - gamma) / (chi_inst +  kappa)
