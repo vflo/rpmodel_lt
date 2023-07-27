@@ -3,4 +3,8 @@
 export(rpmodel_subdaily)
 export(rpmodel_subdaily_sun_shade)
 export(irradiance_partition)
+export(rpmodel_core)
+export(rpmodel)
+export(subroutines)
+export(rpmodel_subdaily_sun_shade)
 
