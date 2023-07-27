@@ -782,6 +782,8 @@ co2_to_ca <- function(co2, patm){
   return( ca )
 }
 
+
+#' @export
 optimal_chi <- function(kmm, gammastar, ns_star, ca, vpd, beta, c4){
   
   # Input:    - float, 'kmm' : Pa, Michaelis-Menten coeff.
@@ -851,6 +853,7 @@ optimal_chi <- function(kmm, gammastar, ns_star, ca, vpd, beta, c4){
 #   return(mj)
 # }
 
+#' @export
 lue_vcmax_wang17 <- function(out_optchi, kphio, c_molmass, soilmstress,c_cost){
   
   ## Include effect of Jmax limitation
@@ -885,7 +888,7 @@ lue_vcmax_wang17 <- function(out_optchi, kphio, c_molmass, soilmstress,c_cost){
   return(out)
 }
 
-
+#' @export
 lue_vcmax_smith19 <- function(out_optchi, kphio, c_molmass, soilmstress, c_cost){
   
   len <- length(out_optchi[[1]])
@@ -939,7 +942,7 @@ lue_vcmax_smith19 <- function(out_optchi, kphio, c_molmass, soilmstress, c_cost)
   return(out)
 }
 
-
+#' @export
 lue_vcmax_none <- function(out_optchi, kphio, c_molmass, soilmstress){
   ## Do not include effect of Jmax limitation
   len <- length(out_optchi[[1]])
@@ -960,7 +963,7 @@ lue_vcmax_none <- function(out_optchi, kphio, c_molmass, soilmstress){
   return(out)
 }
 
-
+#' @export
 lue_vcmax_c4 <- function( kphio, c_molmass, soilmstress ){
   
   len <- length(kphio)
@@ -979,17 +982,17 @@ lue_vcmax_c4 <- function( kphio, c_molmass, soilmstress ){
   return(out)
 }
 
-## #' Larger quadratic root
-## #' 
-## #' Solves quadratic equation given by y = a*x^2 + bx + c
-## #  Based on MAESTRA equivalent (B. Medlyn)
-## #'
-## #' @param A a parameter in the quadratic equation
-## #' @param B b parameter in the quadratic equation
-## #' @param C c parameter in the quadratic equation
-## #'
-## #' @return larger quardratic root
-## #' @export
+#' Larger quadratic root
+#'
+#' Solves quadratic equation given by y = a*x^2 + bx + c
+#  Based on MAESTRA equivalent (B. Medlyn)
+#'
+#' @param A a parameter in the quadratic equation
+#' @param B b parameter in the quadratic equation
+#' @param C c parameter in the quadratic equation
+#'
+#' @return larger quardratic root
+#' @export
 
 QUADP <- function(A,B,C){
   
@@ -1014,16 +1017,16 @@ QUADP <- function(A,B,C){
   
 }
 
-## #' Minor quadratic root
-## #' 
-## #' Solves quadratic equation given by y = a*x^2 + bx + c
-## #' #  Based on MAESTRA equivalent (B. Medlyn)
-## #' @param A a parameter in the quadratic equation
-## #' @param B b parameter in the quadratic equation
-## #' @param C c parameter in the quadratic equation
-## #' 
-## #' @return minor quardratic root
-## #' @export
+#' Minor quadratic root
+#'
+#' Solves quadratic equation given by y = a*x^2 + bx + c
+#' #  Based on MAESTRA equivalent (B. Medlyn)
+#' @param A a parameter in the quadratic equation
+#' @param B b parameter in the quadratic equation
+#' @param C c parameter in the quadratic equation
+#'
+#' @return minor quardratic root
+#' @export
 
 QUADM <- function(A,B,C){
   
@@ -1048,7 +1051,7 @@ QUADM <- function(A,B,C){
   
 }
 
-
+#' @export
 resistance_neutral <- function(ws_mean=ws_mean, canopy_height = canopy_height){
   
   
@@ -1071,7 +1074,7 @@ resistance_neutral <- function(ws_mean=ws_mean, canopy_height = canopy_height){
   
 }
 
-
+#' @export
 calc_ustar <- function(ws,canopy_height,z,LAI){
   u <- ws
   if(u <=0){u <- 1e-2} #avoid infinite atmospheric stability index
@@ -1110,7 +1113,7 @@ calc_ustar <- function(ws,canopy_height,z,LAI){
   return(ust_calc)
 }
 
-
+#' @export
 calc_ga <- function(ws, ust, canopy_height, tcleaf_root,
                     Ta, z, LAI, patm, mol_gas_const, rho, tk, gb_method, 
                     leafwidth){
@@ -1196,7 +1199,7 @@ calc_ga <- function(ws, ust, canopy_height, tcleaf_root,
 
 
 
-
+#' @export
 calc_new_vpd <- function(tnew, told, vpd){
   es = exp(34.494-4924.99/(told+237.1))/((told+105)^1.57)
   ea = es - vpd
@@ -1218,7 +1221,7 @@ calc_air_density <- function(patm, tc){
 
 
 
-
+#' @export
 calc_soilmstress <- function(
     soilm,
     AI = 1
