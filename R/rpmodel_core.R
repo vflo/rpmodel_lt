@@ -264,9 +264,14 @@ rpmodel_core <- function(
   c_cost = 0.41, # Change to 0.05336251 if method_jmalim = "smith19" is used
   soilm = stopifnot(!do_soilmstress),
   AI = 1,
+  PET_P = 1,
+  mGDD0 = NA,
+  turgor_loss_soilmostress = FALSE,
+  soilmstress_turgor = NA,
   c4 = FALSE,
   method_jmaxlim = "wang17",
   do_ftemp_kphio = TRUE,
+  do_phi0_arrh = TRUE,
   do_soilmstress = FALSE,
   returnvar = NULL,
   verbose = FALSE 
@@ -306,7 +311,12 @@ rpmodel_core <- function(
     do_ftemp_kphio <- do_ftemp_kphio[1]
   }
   if (do_ftemp_kphio) {
-    kphio <- ftemp_kphio( tcleaf, c4 ) * kphio
+    if(do_phi0_arrh){
+      kphio <- calc_phi0(AI = PET_P,tc = tc,mGDD0=NA)
+    } else {
+      kphio <- ftemp_kphio( tcleaf, c4 ) * kphio
+    }
+
   } else {
     if (c4){
       kphio <- ftemp_kphio( 15.0, c4 ) * kphio
@@ -319,7 +329,15 @@ rpmodel_core <- function(
       warning("Argument 'AI' has length > 1. Only the first element is used.")
       AI <- AI[1]
     }
-    soilmstress <- calc_soilmstress(soilm, AI)
+    if(turgor_loss_soilmostress){
+      
+     soilmstress <- soilmstress_turgor
+      
+      
+    }else{
+      soilmstress <- calc_soilmstress(soilm, AI)
+    }
+    
   }
   else {
     soilmstress <- 1.0
@@ -465,6 +483,7 @@ rpmodel_core <- function(
 
   ## average stomatal conductance
   gs <- assim / (ca - ci)
+  gs[gs<0] <- 0
 
   ## construct list for output
   out <- list(

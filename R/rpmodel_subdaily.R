@@ -272,8 +272,11 @@ rpmodel_subdaily <- function(
     TIMESTAMP, tc, vpd, co2, fapar = NA, LAI = NA, ppfd, u = NA, ustar = NA,#wind speed in m s^-1
     canopy_height=NA, sw_in = NA, patm = NA, elv = NA, z = NA, leafwidth = NA, netrad = NA, ga = NA,
     kphio = ifelse(do_ftemp_kphio, ifelse(do_soilmstress, 0.087182, 0.081785), 0.049977),
-    beta = 146.0, c_cost = 0.41, soilm = 1.0, AI = 1.0,
-    c4 = FALSE, method_jmaxlim = "wang17", do_ftemp_kphio = TRUE, do_soilmstress = FALSE,
+    beta = 146.0, c_cost = 0.41, soilm = 1.0, AI = 1.0, PET_P = 1, mGDD0 = 15,
+    turgor_loss_soilmostress = FALSE,
+    psi_soil = NA, psi_intercept = NA, psi_sigma = NA,
+    c4 = FALSE, method_jmaxlim = "wang17", do_ftemp_kphio = TRUE, 
+    do_phi0_arrh = TRUE, do_soilmstress = FALSE,
     do_leaftemp = FALSE, gb_method = "Su_2001", do_acclimation = FALSE, epsleaf = 0.96, #thermal absorptivity of the leaf
     energy_params = list(
       ste_bolz = 5.67e-8, #W m^-2 K^-4
@@ -308,24 +311,109 @@ rpmodel_subdaily <- function(
   CP <- 1005 # specific heat capacity of air at constant pressure (J kg-1 K-1)
   spe_gas_const = mol_gas_const/mol_mas_wv #J g^-1 K^-1
   
-  #---- soil moisture stress as a function of soil moisture and mean alpha -----
-  if (do_soilmstress) {
-    if (length(AI) > 1){
-      warning("Argument 'AI' has length > 1. Only the first element is used.")
-      AI <- AI[1]
-    }
-    soilmstress <- calc_soilmstress(soilm, AI)
-  }
-  else {
-    soilmstress <- 1.0
-  }
-  
   #---- check for negative ppfd ----
   if(any(ppfd<0)){
     warning("Some values of PPFD are negative. Those PPFD < 0 will be set to 0.")
     ppfd[ppfd<0] <- 0
   }
   
+  
+  #---- soil moisture stress as a function of soil moisture and mean alpha -----
+  if (do_soilmstress) {
+    if (length(AI) > 1){
+      warning("Argument 'AI' has length > 1. Only the first element is used.")
+      AI <- AI[1]
+    }
+    if(turgor_loss_soilmostress){
+      
+      dpsi <- psi_soil - (psi_intercept + psi_sigma*psi_soil)
+      dpsi[dpsi<0] <- 0
+      
+      rpmodel(tc, vpd, co2, fapar, LAI,
+              ppfd, u, ustar, canopy_height, sw_in, patm, 
+              elv, z, leafwidth, netrad, kphio, beta, c_cost,
+              soilm, AI, PET_P, mGDD0, FALSE,
+              NA, c4, method_jmaxlim, 
+              do_ftemp_kphio, 
+              do_phi0_arrh, 
+              do_soilmstress = FALSE, 
+              do_leaftemp = FALSE,
+              gb_method = gb_method, 
+              epsleaf = epsleaf,
+              energy_params = energy_params, verbose = verbose)%>% 
+        as_tibble()-> df_E_ww
+
+      df_E_ww <- df_E_ww %>% 
+        mutate(e = 1.6*gs*vpd/patm)
+      
+      df_E_ww %>% 
+        cbind(TIMESTAMP = TIMESTAMP,
+              vpd = vpd,
+              patm = patm,
+              psi_soil = psi_soil,
+              dpsi = dpsi) %>% 
+        mutate(hour = lubridate::hour(TIMESTAMP),
+               year = lubridate::year(TIMESTAMP)) %>% 
+        # filter(hour %in% c(12)) %>%
+        # mutate(e = 1.6*gs*(vpd/patm),
+        #        Qh25 = ns_star * e/(vpd/patm) / -psi_intercept ) -> foo
+        mutate(Qh25 = ns_star * e / -psi_intercept ) -> foo
+      # mutate(e = 1.6*gs*vpd/patm,
+      #        Qh25 = ns_star * e / dpsi ) -> foo
+      foo%>% 
+        # group_by(year) %>% 
+        summarise(Qh25_95 = quantile(Qh25,0.95,na.rm=TRUE)) -> Qh25
+
+
+      
+      # dpsi_e <- foo$e/Qh25$Qh25_95*foo$ns_star
+      # E_stress <- Qh25$Qh25_95*dpsi*(foo$vpd/foo$patm)/foo$ns_star
+      # E_stress <- Qh25$Qh25_95*foo$dpsi/foo$ns_star
+      dpsi_ww <- foo$e * foo$ns_star / Qh25$Qh25_95
+      Qh25_actual = df_E_ww$ns_star * df_E_ww$e / dpsi
+      # gs_stress <- E_stress*foo$patm/(1.6*foo$vpd)
+      
+      soilmstress <- dpsi/dpsi_ww
+      # soilmstress <- E_stress/(foo$e)
+      # soilmstress <- gs_stress/(foo$gs)
+      # soilmstress <- E_stress/(Qh25$Qh25_95* - psi_intercept/df_E_ww$ns_star)
+      # soilmstress <- dpsi/dpsi_e
+      
+      tibble(TIMESTAMP = TIMESTAMP,
+             soilmstress = soilmstress,
+             Qh25_actual=Qh25_actual) %>% 
+        mutate(hour = lubridate::hour(TIMESTAMP),
+               day = lubridate::date(TIMESTAMP),
+               soilmstress = case_when(Qh25_actual>Qh25$Qh25_95 ~ Qh25$Qh25_95/Qh25_actual,
+                                       TRUE~soilmstress),
+               soilmstress = case_when(soilmstress > 1 ~ 1,
+                                       TRUE ~ soilmstress)) %>%
+        group_by(day) %>% 
+        mutate(soilmstress = min(soilmstress,na.rm=TRUE)) %>% 
+        # filter(hour %in% c(12)) %>%
+        pull(soilmstress) -> soilmstress
+      
+      # tibble(TIMESTAMP = TIMESTAMP) %>% 
+      #   mutate(day = lubridate::date(TIMESTAMP)) %>% 
+      #   left_join(foo %>% 
+      #   mutate(day = lubridate::date(TIMESTAMP)) %>% 
+      #   dplyr::select(day,soilmstress) %>% 
+      #   group_by(day) %>% 
+      #   summarise(soilmstress = mean(soilmstress,na.rm=TRUE))) %>% 
+      #   pull(soilmstress) -> soilmstress
+      # 
+      
+        
+    }else{
+      soilmstress <- calc_soilmstress(soilm, AI)
+    }
+
+  }
+  else {
+    soilmstress <- 1.0
+  }
+  
+
   # 1.0 Calculate P model without acclimation
   # tibble(TIMESTAMP,tc, vpd, co2, fapar, LAI, ppfd, u, ustar, canopy_height, sw_in, netrad, patm, meanalpha) %>% 
   #   split(seq(nrow(.))) %>%
@@ -343,11 +431,15 @@ rpmodel_subdaily <- function(
   rpmodel(tc, vpd, co2, fapar, LAI,
           ppfd, u, ustar, canopy_height, sw_in, patm, 
           elv, z, leafwidth, netrad, kphio, beta, c_cost,
-          soilm, AI, c4, method_jmaxlim, do_ftemp_kphio, 
-          do_soilmstress, do_leaftemp = FALSE,
+          soilm, AI, PET_P = PET_P, mGDD0 = mGDD0,       
+          turgor_loss_soilmostress = turgor_loss_soilmostress,
+          soilmstress_turgor = soilmstress,
+          c4, method_jmaxlim, do_ftemp_kphio, 
+          do_phi0_arrh, do_soilmstress, do_leaftemp = FALSE,
           gb_method = gb_method, epsleaf = epsleaf,
           energy_params = energy_params, verbose = verbose)%>% 
     as_tibble()-> df_Or
+
   
   #DO ACCLIMATION?
   if(!do_acclimation){
@@ -408,8 +500,10 @@ rpmodel_subdaily <- function(
         res <- rpmodel(x$tc, x$vpd, x$co2, x$fapar, x$LAI,
                        x$ppfd, x$u, x$ustar, x$canopy_height,x$sw_in, x$patm, 
                        unique(elv), unique(z), leafwidth, x$netrad, kphio, beta, c_cost,
-                       x$soilm, AI, c4,
-                       method_jmaxlim, do_ftemp_kphio, do_soilmstress, 
+                       x$soilm, AI, PET_P = PET_P, mGDD0 = mGDD0,       
+                       turgor_loss_soilmostress = turgor_loss_soilmostress,
+                       soilmstress_turgor = x$soilmstress, c4,
+                       method_jmaxlim, do_ftemp_kphio, do_phi0_arrh, do_soilmstress, 
                        do_leaftemp = do_leaftemp, gb_method = gb_method, 
                        verbose = verbose, epsleaf=x$epsleaf, energy_params = energy_params)%>% 
           as_tibble()
@@ -478,7 +572,8 @@ rpmodel_subdaily <- function(
                                  kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,  
                                  vcmax_opt = x$vcmax_opt, jmax_opt = x$jmax_opt,
                                  soilmstress = x$soilmstress, method_jmaxlim = method_jmaxlim,
-                                 c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                                 do_phi0_arrh = do_phi0_arrh, PET_P = PET_P, mGDD0 = mGDD0, c4 = c4,  
+                                 rd_to_vcmax = rd_to_vcmax, 
                                  beta = beta, c_cost = c_cost, 
                                  u = x$u, canopy_height = x$canopy_height,
                                  tc = x$tc, tk = tk, tkleaf = tkleaf, 
@@ -514,6 +609,7 @@ rpmodel_subdaily <- function(
                                kmm = x$kmm, kmm_opt = x$kmm_opt, kphio = kphio,  
                                vcmax_opt = x$vcmax_opt, jmax_opt = x$jmax_opt,
                                soilmstress = x$soilmstress, method_jmaxlim = method_jmaxlim,
+                               do_phi0_arrh = do_phi0_arrh, PET_P = PET_P, mGDD0 = mGDD0,
                                c4 = c4, rd_to_vcmax = rd_to_vcmax, 
                                beta = beta, c_cost = c_cost, 
                                u = x$u, canopy_height = x$canopy_height,
@@ -555,7 +651,8 @@ rpmodel_subdaily <- function(
                               fapar = DF$fapar, fapar_opt = DF$fapar_opt, ca = DF$ca, ca_opt = DF$ca_opt, 
                               xi = DF$xi, xiPa = DF$xi_opt, patm = DF$patm, ns_star_opt = DF$ns_star_opt, 
                               gammastar = DF$gammastar, gammastar_opt = DF$gammastar_opt, kmm = DF$kmm, kmm_opt = DF$kmm_opt,
-                              kphio = kphio, soilmstress = soilmstress, method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax,
+                              kphio = kphio, soilmstress = soilmstress, method_jmaxlim = method_jmaxlim, 
+                              do_phi0_arrh = do_phi0_arrh, PET_P = PET_P, mGDD0 = mGDD0, c4 = c4, rd_to_vcmax = rd_to_vcmax,
                               beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI, vcmax_opt = DF$vcmax_opt, jmax_opt = DF$jmax_opt)
     
     
@@ -762,8 +859,8 @@ headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck
 
 
 rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xi, xiPa, patm, ns_star_opt,
-                               gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim, c4,
-                               rd_to_vcmax, beta, c_cost, leafwidth, LAI,vcmax_opt,jmax_opt){
+                               gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim,
+                               do_phi0_arrh, PET_P, mGDD0, c4, rd_to_vcmax, beta, c_cost, leafwidth, LAI,vcmax_opt,jmax_opt){
   #---- Fixed parameters--------------------------------------------------------
   c_molmass <- 12.0107  # molecular mass of carbon (g)
   #'
@@ -780,8 +877,13 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   # 1. OPTIMAL Vcmax and Jmax----
     
     # Intrinsic quantum efficiency of photosynthesis (phi0)
-    phi0_opt = (1/8) *(0.352 + 0.022*tcleaf_opt - 0.00034*tcleaf_opt^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
-    
+    if(do_phi0_arrh){
+      phi0_opt <- calc_phi0(AI = PET_P,tc = tcleaf_opt, mGDD0 = mGDD0)
+    }else{   
+      phi0_opt = (1/8) *(0.352 + 0.022*tcleaf_opt - 0.00034*tcleaf_opt^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
+    }
+
+  
     # acclimated xiPa (parameter that determines the sensitivity of ci/ca to VPD)
     xiPa = sqrt((beta*(kmm_opt + gammastar_opt))/(1.6*ns_star_opt)) # [Pa^1/2]
     
@@ -825,7 +927,11 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
   kmm <- calc_kmm( tcleaf, patm )
   
   # 3.2 Intrinsic quantum efficiency of photosynthesis (phi0)
-  phi0 = (1/8) *(0.352 + 0.022*tcleaf - 0.00034*tcleaf^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
+  if(do_phi0_arrh){
+    phi0 <- calc_phi0(AI = PET_P,tc = tcleaf, mGDD0 = mGDD0)
+  }else{   
+    phi0 = (1/8) *(0.352 + 0.022*tcleaf - 0.00034*tcleaf^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
+  }
   
   # 3.3 ci instantaneous
   ci_inst = (xiPa * ca + gammastar*sqrt(vpd))/(xiPa + sqrt(vpd))
@@ -850,7 +956,7 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
     kappa <- kmm / ca
 
     ## use chi for calculating mj
-    mj <- (chi - gamma) / (chi + 2.0 * gamma)
+    mj <- (chi_inst - gamma) / (chi_inst + 2.0 * gamma)
 
     ## mc
     mc <- (chi_inst - gamma) / (chi_inst +  kappa)
@@ -992,7 +1098,7 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                            ca_opt, xi, xiPa, patm, ns_star_opt, 
                            gammastar, gammastar_opt, kmm, 
                            kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
-                           method_jmaxlim, c4, rd_to_vcmax, 
+                           method_jmaxlim, do_phi0_arrh, PET_P, mGDD0, c4, rd_to_vcmax, 
                            beta, c_cost, u, canopy_height,
                            tc, tk, tkleaf, z, LAI, ustar, netrad, ga, mol_gas_const,
                            J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
@@ -1003,7 +1109,9 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
                                ca_opt = ca_opt, xi = xi, xiPa = xiPa, patm = patm, ns_star_opt = ns_star_opt, 
                                gammastar = gammastar, gammastar_opt = gammastar_opt, kmm = kmm, 
                                kmm_opt = kmm_opt, kphio = kphio, soilmstress = soilmstress, 
-                               method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+                               method_jmaxlim = method_jmaxlim, do_phi0_arrh = do_phi0_arrh,
+                               PET_P = PET_P, mGDD0 = mGDD0,
+                               c4 = c4, rd_to_vcmax = rd_to_vcmax, 
                                beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI,
                                vcmax_opt=vcmax_opt, jmax_opt = jmax_opt)
   
@@ -1043,6 +1151,7 @@ energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd,
     Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
     
   #Thermal Infrared Input
+    
     epssky = 1.72 * ((ea*1e-3)/tk)^0.143
     Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
     
