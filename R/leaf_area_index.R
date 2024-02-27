@@ -176,7 +176,7 @@ cal_fPHU <- function(Ta,Tmin=NA,Tmax=NA,ty=NA){
     fphu_1 <- 0.05
     fphu_2 <- 0.45
     fphu_sen <- 0.5
-  } else (ty=='sw') {
+  } else {
     fphu_1 <- 0.15
     fphu_2 <- 0.5
     fphu_sen <- 0.6

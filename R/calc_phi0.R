@@ -1,5 +1,5 @@
 #calc_phi0
-calc_phi0<-function(AI,tc,mGDD0=NA){
+calc_phi0<-function(tc,mGDD0=NA,AI){
 	# ************************************************************************
 	# Name:     calc_phi0
 	# Inputs:   - double - scalar (AI), climatological aridity index, defined as PET/P
@@ -16,17 +16,22 @@ calc_phi0<-function(AI,tc,mGDD0=NA){
 	###############################################################################################
 	# 01.define the parameters/constants
 	###############################################################################################
-	phi_o_theo <- 0.111       # theoretical maximum phi0 (Long, 1993;Sandoval et al., in.prep.)
-	m <- 6.8681               # curvature parameter phio max (Sandoval et al., in.prep.)
-	n <- 0.07956432           # curvature parameter phio max (Sandoval et al., in.prep.)
-	Rgas <- 8.3145            # ideal gas constant J/mol/K
-	Ha <- 75000		      # activation energy J/mol (Sandoval et al., in.prep.)
+	phi_o_theo <- 0.111       	# theoretical maximum phi0 (Long, 1993;Sandoval et al., in.prep.)
+	m <- 0.4               		# curvature parameter phio max (Sandoval et al., in.prep.)
+	n <- 1.01           			# curvature parameter phio max (Sandoval et al., in.prep.)
+	Rgas <- 8.3145            	# ideal gas constant J/mol/K
+	dS0 = 1540				# max entropy change(Sandoval et al., in.prep.)
+	dS_mgdd = 0.43370 			# rate entropy change with temperature phio max (Sandoval et al., in.prep.)
+	Ha <- 62600	      		# activation energy J/mol (Sandoval et al., in.prep.)
 	#if mGDD0 is missing, calculate
 	if(is.na(mGDD0)){
 		mGDD0<-mean(tc[tc>0],na.rm=T)
 	}
 	##calc activation entropy, J/mol/K (Sandoval et al., in.prep.)
-	DeltaS = 1558.853-50.223*mGDD0
+	#DeltaS = 1558.853-50.223*mGDD0
+	#DeltaS = dS0-dS_mgdd*mGDD0
+	##power law from flux data kit
+	DeltaS = dS0*mGDD0^(-dS_mgdd)
 	##calc deaactivation energy J/mol (Sandoval et al., in.prep.)
 	Hd<- 294.804 *DeltaS
 		
@@ -40,7 +45,7 @@ calc_phi0<-function(AI,tc,mGDD0=NA){
 		
 		##fix for optimization
 		if(!is.na(Ha)& !is.na(Hd)& Ha>Hd){
-			Ha<-Hd-1
+			Hd=Ha+100
 		}
 		
 		Top<-Hd/(dent-Rgas*log(Ha/(Hd-Ha)))
