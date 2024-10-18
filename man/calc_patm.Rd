@@ -2,7 +2,7 @@
 % Please edit documentation in R/subroutines.R
 \name{calc_patm}
 \alias{calc_patm}
-\title{Calculates an empirical soil moisture stress factor}
+\title{Calculates atmospheric pressure}
 \usage{
 calc_patm(elv, patm0 = 101325)
 }
@@ -10,54 +10,15 @@ calc_patm(elv, patm0 = 101325)
 \item{elv}{Elevation above sea-level (m.a.s.l.)}
 
 \item{patm0}{(Optional) Atmospheric pressure at sea level (Pa), defaults to 101325 Pa.}
-
-\item{soilm}{Relative soil moisture as a fraction
-of field capacity (unitless). Defaults to 1.0 (no soil moisture stress).}
-
-\item{meanalpha}{Local annual mean ratio of actual over potential 
-evapotranspiration, measure for average aridity. Defaults to 1.0.}
-
-\item{apar_soilm}{(Optional, used only if \code{do_soilmstress==TRUE})
-Parameter determining the sensitivity of the empirical soil moisture stress
-function. Defaults to 0.0, the empirically fitted value as presented in Stocker
-et al. (2019) Geosci. Model Dev. for model setup 'FULL' (corresponding to a setup
-with \code{method_jmaxlim="wang17", do_ftemp_kphio=TRUE, do_soilmstress=TRUE}).}
-
-\item{bpar_soilm}{(Optional, used only if \code{do_soilmstress==TRUE}) Parameter
-determining the sensitivity of the empirical soil moisture stress function. Defaults
-to ~0.6, the empirically fitted value as presented in Stocker et al. (2019) Geosci. Model Dev.
-for model setup 'FULL' (corresponding to a setup with \code{method_jmaxlim="wang17",
-do_ftemp_kphio=TRUE, do_soilmstress=TRUE}).}
 }
 \value{
-A numeric value for \eqn{\beta}
-
 A numeric value for \eqn{p}
 }
 \description{
-Calculates an empirical soil moisture stress factor as a function of relative
-soil moisture (fraction of field capacity).
+Calculates atmospheric pressure as a function of elevation, by default assuming 
+standard atmosphere (101325 Pa at sea level)
 }
 \details{
-The soil moisture stress factor is calculated using a quadratic function that
-is 1 above \code{soilm} = 0.6 and has a sensitivity, given by the y-axis cutoff,
-(zero soil moisture), determined  by average aridity (argument \code{meanalpha}) as:
-\deqn{
-    \beta = q(\theta - \theta*)^2 + 1
-}
-for \eqn{\theta < \theta*} and \eqn{\beta = 1.0} otherwise. \eqn{\theta*} is fixed at 0.6.
-\eqn{q} is the sensitivity parameter and is calculated as a linear function of average aridity,
-quantified by the local annual mean ratio of actual over potential evapotranspiration, termed
-\eqn{\alpha}:
-\deqn{
-     q=(\beta0-1)/(\theta*-\theta0)^2
-}
-\eqn{\theta0} is 0.0, and
-\deqn{
-     \beta0 = a + b \alpha
-}
-\eqn{a} is given by argument \code{apar}, \eqn{b} is given by argument \code{bpar}.
-
 The elevation-dependence of atmospheric pressure is computed by 
 assuming a linear decrease in temperature with elevation and a mean 
 adiabatic lapse rate (Berberan-Santos et al., 1997):
@@ -73,17 +34,11 @@ pressure at 0 m a.s.l. (argument \code{patm0}, defaults to 101325 Pa),
 is the standard temperature (298.15 K, corresponds to 25 deg C).
 }
 \examples{
-## Relative reduction (\%) in GPP due to soil moisture stress at
-## relative soil water content ('soilm') of 0.2:
-print((calc_soilmstress(0.2)-1)*100 )
-
 print("Standard atmospheric pressure, in Pa, corrected for 1000 m.a.s.l.:")
 print(calc_patm(1000))
 
 }
 \references{
-Stocker, B. et al. Geoscientific Model Development Discussions (in prep.)
-
 Allen, R. G., Pereira, L. S., Raes, D., Smith, M.: 
              FAO Irrigation and Drainage Paper No. 56, Food and 
              Agriculture Organization of the United Nations, 1998

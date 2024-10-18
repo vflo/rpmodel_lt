@@ -8,8 +8,6 @@
 ^benchmarking$
 ^Rscripts$
 ^Rold$
-^R\PC_model.R
-^R\leaf_area_index.R
 
 # R-markdown files in the root folder.
 ^LICENSE.*$

@@ -968,231 +968,231 @@ headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck
 
 
 
-
-rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xi, xiPa, patm, ns_star_opt,
-                               gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim, c4,
-                               rd_to_vcmax, beta, c_cost, leafwidth, LAI,vcmax_opt,jmax_opt){
-  #---- Fixed parameters--------------------------------------------------------
-  c_molmass <- 12.0107  # molecular mass of carbon (g)
-  #'
-  kPo <- 101325.0       # standard atmosphere, Pa (Allen, 1973)
-  kTo <- 25.0           # base temperature, deg C (Prentice, unpublished)
-  rd_to_vcmax <- 0.015  # Ratio of Rdark to Vcmax25, number from Atkin et al., 2015 for C3 herbaceous
-  
-  
-  ## viscosity correction factor = viscosity( temp, press )/viscosity( 25 degC, 1013.25 Pa)
-  ns      <- viscosity_h2o( tcleaf, patm )  # Pa sc4, 1.0,
-  ns25    <- viscosity_h2o( kTo, kPo )  # Pa s
-  ns_star <- ns / ns25  # (unitless)
-  
-  # 1. OPTIMAL Vcmax and Jmax----
-    
-    # Intrinsic quantum efficiency of photosynthesis (phi0)
-    phi0_opt = (1/8) *(0.352 + 0.022*tcleaf_opt - 0.00034*tcleaf_opt^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
-    
-    # acclimated xiPa (parameter that determines the sensitivity of ci/ca to VPD)
-    xiPa = sqrt((beta*(kmm_opt + gammastar_opt))/(1.6*ns_star_opt)) # [Pa^1/2]
-    
-    # acclimated ci (with acclimated xiPa, and adjusted with the actual VPD)
-    ci_opt = (xiPa * ca_opt + gammastar_opt*sqrt(vpd))/
-      (xiPa + sqrt(vpd))
-    
-    
-    # OPTIMAL Vcmax
-    vcmax_opt  = phi0_opt * ppfd_opt*fapar_opt * soilmstress*
-      ((ci_opt + kmm_opt) / (ci_opt + 2*gammastar_opt)) *
-      sqrt(1 - (c_cost*(ci_opt + 2*gammastar_opt)/(ci_opt - gammastar_opt))^(2/3)) #[umol m-2 s-1]
-    
-    # OPTIMAL Jmax
-    jmax_opt  = soilmstress*(4 * phi0_opt * ppfd_opt*fapar_opt) / 
-      sqrt(1/(1 - (c_cost*( ci_opt + 2*gammastar_opt)/
-                     (ci_opt - gammastar_opt))^(2.0/3.0)) - 1) #[umol m-2 s-1]
-  
-  
-  tkleaf_opt = tcleaf_opt + 273.15 # [K]   
-  tkleaf = tcleaf + 273.15 # [K]
-  
-  # 2. INSTANTANEOUS Vcmax and Jmax----
-  # The Arrhenius equation constants:
-  Ha = 65330# [J mol-1]
-  Haj = 43900
-  Rgas = 8.314 # [J mol-1 K-1]
-  vcmaxAdjusted = vcmax_opt * exp((Ha/Rgas)*(1/tkleaf_opt - 1/tkleaf))
-  jmaxAdjusted = jmax_opt * exp((Haj/Rgas)*(1/tkleaf_opt - 1/tkleaf))
-  rm(Rgas,Ha,Haj)
-  
-  # vcmaxAdjusted = vcmax_opt * ftemp_inst_vcmax(tcleaf, tcleaf_opt)
-  # jmaxAdjusted = jmax_opt * ftemp_inst_jmax(tcleaf, tcleaf_opt)
-  
-  
-  # 3. instantaneous (with acclimated xiPa, and adjusted with the actual VPD)
-  ## photorespiratory compensation point - Gamma-star (Pa)
-  gammastar <- calc_gammastar( tcleaf, patm )
-  
-  # 3.1 Michaelis-Menten coef. (Pa)
-  kmm <- calc_kmm( tcleaf, patm )
-  
-  # 3.2 Intrinsic quantum efficiency of photosynthesis (phi0)
-  phi0 = (1/8) *(0.352 + 0.022*tcleaf - 0.00034*tcleaf^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
-  
-  # 3.3 ci instantaneous
-  ci_inst = (xiPa * ca + gammastar*sqrt(vpd))/(xiPa + sqrt(vpd))
-  
-  # 3.4 instantaneous chi
-  chi_inst = ci_inst/ca
-  # ci_inst = chi_inst*ca
-  
-  # 3.5 Opt chi output
-  if(c4){
-    out_optchi <- list(
-      xi = xiPa,
-      chi = chi_inst,
-      mc = 1.0,
-      mj = 1.0,
-      mjoc = 1.0
-    )
-
-  } else {
-    ## alternative variables
-    gamma <- gammastar / ca
-    kappa <- kmm / ca
-
-    ## use chi for calculating mj
-    mj <- (chi_inst - gamma)/(chi_inst + kappa)
-
-    ## mc
-    mc <- (chi_inst - gamma) / (chi_inst +  kappa)
-
-    ## mj:mv
-    mjoc <- (chi_inst +  kappa) / (chi_inst + 2.0 * gamma)
-
-    # format output list
-    out_optchi <- list(
-      xi = xiPa,
-      chi = chi_inst,
-      mc = mc,
-      mj = mj,
-      mjoc = mjoc
-    )
-
-  }
-
-
-  # ---- Corrolary preditions ---------------------------------------------------
-  # 4.0 intrinsic water use efficiency (in Pa)
-  iwue = (ca - ci_inst)/1.6
-
-  #---- Vcmax and light use efficiency -----------------------------------------
-  # 7.0 Jmax limitation comes in only at this step
-  # if (c4){
-  #   out_lue_vcmax <- lue_vcmax_c4(
-  #     kphio,
-  #     c_molmass,
-  #     soilmstress
-  #   )
-  # 
-  # } else if (method_jmaxlim=="wang17"){
-  # 
-  #   ## apply correction by Jmax limitation
-  #   out_lue_vcmax <- lue_vcmax_wang17(
-  #     out_optchi,
-  #     kphio,
-  #     c_molmass,
-  #     soilmstress
-  #   )
-  # 
-  # } else if (method_jmaxlim=="smith19"){
-  # 
-  #   out_lue_vcmax <- lue_vcmax_smith19(
-  #     out_optchi,
-  #     kphio,
-  #     c_molmass,
-  #     soilmstress
-  #   )
-  # 
-  # } else if (method_jmaxlim=="none"){
-  # 
-  #   out_lue_vcmax <- lue_vcmax_none(
-  #     out_optchi,
-  #     kphio,
-  #     c_molmass,
-  #     soilmstress
-  #   )
-  # 
-  # } else {
-  # 
-  #   stop("rpmodel(): argument method_jmaxlim not idetified.")
-  # 
-  # }
-  # 
-  
-  # 5.0 CALCULATE the assimilation rate
-
-  # acclimated Ac with the acclimated xiPa term
-  # a_c = vcmaxAdjusted * out_optchi$mc  #[umol m-2 s-1]
-  a_c = vcmaxAdjusted * (ci_inst - gammastar) / (ci_inst + kmm)#[umol m-2 s-1]
-  
-  # acclimated AJ with the acclimated xiPa term
-  # a_j = phi0 * fapar * ppfd * out_optchi$mj * jmaxAdjusted  #[umol m-2 s-1]
-  J = (4 *phi0*fapar * ppfd)/sqrt(1 + ((4*phi0*fapar * ppfd)/(jmaxAdjusted))^(2))
-  a_j = J/4*(ci_inst - gammastar)/(ci_inst + 2.0 * gammastar)
-  
-  #---- Corrolary preditions ---------------------------------------------------
-  # 6.0 Vcmax25 (vcmax normalized to 25 deg C)
-  ftemp25_inst_vcmax  <- ftemp_inst_vcmax( tcleaf, tcleaf_opt, tcref = 25.0 )
-  vcmax25  <- vcmax_opt / ftemp25_inst_vcmax
-  
-  
-  ## 7.0  Dark respiration at growth temperature
-  ftemp_inst_rd <- ftemp_inst_rd(tcleaf_opt)
-  rd  <- rd_to_vcmax * (ftemp_inst_rd / ftemp25_inst_vcmax) * vcmax_opt
-
-  
-  # 8.0 Assimilation
-  assim <- ifelse(a_j < a_c , a_j, a_c)
-  # assim_eq_check <- all.equal(assim, gpp/c_molmass, tol = 0.001)
-  # if (! isTRUE(assim_eq_check)) {
-  #   warning("rpmodel_subdaily(): Assimilation and GPP are not identical.\n",
-  #           assim_eq_check)
-  # }
-  # Gross Primary Productivity
-  gpp <- assim * c_molmass  # in ug C m-2 s-1
-  
-  ## 9.0  average stomatal conductance
-  gs <- assim/(ca - ci_inst)
-  e <- 1.6*gs*vpd
-  
-  ## 10.0 calculate frost and heat cost ####
-  #Based in Villar y Merino - 2001 - Comparison of leaf construction costs in woody spe
-  # assim <- mapply(calculate_assimilation_lethal, leafwidth, tcleaf, LAI, assim)
-  
-  ## 11.0 construct list for output
-  out <- list(
-    gpp             = gpp,   # remove this again later
-    assim           = assim,
-    ca              = ca,
-    gammastar       = gammastar,
-    kmm             = kmm,
-    chi             = out_optchi$chi,
-    xi              = out_optchi$xi,
-    mj              = out_optchi$mj,
-    mc              = out_optchi$mc,
-    ci              = ci_inst,
-    iwue            = iwue,
-    gs              = gs,
-    e               = e,
-    vcmax           = vcmaxAdjusted,
-    jmax            = jmaxAdjusted,
-    vcmax25         = vcmax25,
-    rd              = rd,
-    vpd_leaf        = vpd,
-    ns_star         = ns_star
-  )
-  
-  return(out)
-  
-  
-}
+#' 
+#' rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xi, xiPa, patm, ns_star_opt,
+#'                                gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim, c4,
+#'                                rd_to_vcmax, beta, c_cost, leafwidth, LAI,vcmax_opt,jmax_opt){
+#'   #---- Fixed parameters--------------------------------------------------------
+#'   c_molmass <- 12.0107  # molecular mass of carbon (g)
+#'   #'
+#'   kPo <- 101325.0       # standard atmosphere, Pa (Allen, 1973)
+#'   kTo <- 25.0           # base temperature, deg C (Prentice, unpublished)
+#'   rd_to_vcmax <- 0.015  # Ratio of Rdark to Vcmax25, number from Atkin et al., 2015 for C3 herbaceous
+#'   
+#'   
+#'   ## viscosity correction factor = viscosity( temp, press )/viscosity( 25 degC, 1013.25 Pa)
+#'   ns      <- viscosity_h2o( tcleaf, patm )  # Pa sc4, 1.0,
+#'   ns25    <- viscosity_h2o( kTo, kPo )  # Pa s
+#'   ns_star <- ns / ns25  # (unitless)
+#'   
+#'   # 1. OPTIMAL Vcmax and Jmax----
+#'     
+#'     # Intrinsic quantum efficiency of photosynthesis (phi0)
+#'     phi0_opt = (1/8) *(0.352 + 0.022*tcleaf_opt - 0.00034*tcleaf_opt^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
+#'     
+#'     # acclimated xiPa (parameter that determines the sensitivity of ci/ca to VPD)
+#'     xiPa = sqrt((beta*(kmm_opt + gammastar_opt))/(1.6*ns_star_opt)) # [Pa^1/2]
+#'     
+#'     # acclimated ci (with acclimated xiPa, and adjusted with the actual VPD)
+#'     ci_opt = (xiPa * ca_opt + gammastar_opt*sqrt(vpd))/
+#'       (xiPa + sqrt(vpd))
+#'     
+#'     
+#'     # OPTIMAL Vcmax
+#'     vcmax_opt  = phi0_opt * ppfd_opt*fapar_opt * soilmstress*
+#'       ((ci_opt + kmm_opt) / (ci_opt + 2*gammastar_opt)) *
+#'       sqrt(1 - (c_cost*(ci_opt + 2*gammastar_opt)/(ci_opt - gammastar_opt))^(2/3)) #[umol m-2 s-1]
+#'     
+#'     # OPTIMAL Jmax
+#'     jmax_opt  = soilmstress*(4 * phi0_opt * ppfd_opt*fapar_opt) / 
+#'       sqrt(1/(1 - (c_cost*( ci_opt + 2*gammastar_opt)/
+#'                      (ci_opt - gammastar_opt))^(2.0/3.0)) - 1) #[umol m-2 s-1]
+#'   
+#'   
+#'   tkleaf_opt = tcleaf_opt + 273.15 # [K]   
+#'   tkleaf = tcleaf + 273.15 # [K]
+#'   
+#'   # 2. INSTANTANEOUS Vcmax and Jmax----
+#'   # The Arrhenius equation constants:
+#'   Ha = 65330# [J mol-1]
+#'   Haj = 43900
+#'   Rgas = 8.314 # [J mol-1 K-1]
+#'   vcmaxAdjusted = vcmax_opt * exp((Ha/Rgas)*(1/tkleaf_opt - 1/tkleaf))
+#'   jmaxAdjusted = jmax_opt * exp((Haj/Rgas)*(1/tkleaf_opt - 1/tkleaf))
+#'   rm(Rgas,Ha,Haj)
+#'   
+#'   # vcmaxAdjusted = vcmax_opt * ftemp_inst_vcmax(tcleaf, tcleaf_opt)
+#'   # jmaxAdjusted = jmax_opt * ftemp_inst_jmax(tcleaf, tcleaf_opt)
+#'   
+#'   
+#'   # 3. instantaneous (with acclimated xiPa, and adjusted with the actual VPD)
+#'   ## photorespiratory compensation point - Gamma-star (Pa)
+#'   gammastar <- calc_gammastar( tcleaf, patm )
+#'   
+#'   # 3.1 Michaelis-Menten coef. (Pa)
+#'   kmm <- calc_kmm( tcleaf, patm )
+#'   
+#'   # 3.2 Intrinsic quantum efficiency of photosynthesis (phi0)
+#'   phi0 = (1/8) *(0.352 + 0.022*tcleaf - 0.00034*tcleaf^(2)) # Temperature dependence function of phi0 (Bernacchi et al.,2003)
+#'   
+#'   # 3.3 ci instantaneous
+#'   ci_inst = (xiPa * ca + gammastar*sqrt(vpd))/(xiPa + sqrt(vpd))
+#'   
+#'   # 3.4 instantaneous chi
+#'   chi_inst = ci_inst/ca
+#'   # ci_inst = chi_inst*ca
+#'   
+#'   # 3.5 Opt chi output
+#'   if(c4){
+#'     out_optchi <- list(
+#'       xi = xiPa,
+#'       chi = chi_inst,
+#'       mc = 1.0,
+#'       mj = 1.0,
+#'       mjoc = 1.0
+#'     )
+#' 
+#'   } else {
+#'     ## alternative variables
+#'     gamma <- gammastar / ca
+#'     kappa <- kmm / ca
+#' 
+#'     ## use chi for calculating mj
+#'     mj <- (chi_inst - gamma)/(chi_inst + kappa)
+#' 
+#'     ## mc
+#'     mc <- (chi_inst - gamma) / (chi_inst +  kappa)
+#' 
+#'     ## mj:mv
+#'     mjoc <- (chi_inst +  kappa) / (chi_inst + 2.0 * gamma)
+#' 
+#'     # format output list
+#'     out_optchi <- list(
+#'       xi = xiPa,
+#'       chi = chi_inst,
+#'       mc = mc,
+#'       mj = mj,
+#'       mjoc = mjoc
+#'     )
+#' 
+#'   }
+#' 
+#' 
+#'   # ---- Corrolary preditions ---------------------------------------------------
+#'   # 4.0 intrinsic water use efficiency (in Pa)
+#'   iwue = (ca - ci_inst)/1.6
+#' 
+#'   #---- Vcmax and light use efficiency -----------------------------------------
+#'   # 7.0 Jmax limitation comes in only at this step
+#'   # if (c4){
+#'   #   out_lue_vcmax <- lue_vcmax_c4(
+#'   #     kphio,
+#'   #     c_molmass,
+#'   #     soilmstress
+#'   #   )
+#'   # 
+#'   # } else if (method_jmaxlim=="wang17"){
+#'   # 
+#'   #   ## apply correction by Jmax limitation
+#'   #   out_lue_vcmax <- lue_vcmax_wang17(
+#'   #     out_optchi,
+#'   #     kphio,
+#'   #     c_molmass,
+#'   #     soilmstress
+#'   #   )
+#'   # 
+#'   # } else if (method_jmaxlim=="smith19"){
+#'   # 
+#'   #   out_lue_vcmax <- lue_vcmax_smith19(
+#'   #     out_optchi,
+#'   #     kphio,
+#'   #     c_molmass,
+#'   #     soilmstress
+#'   #   )
+#'   # 
+#'   # } else if (method_jmaxlim=="none"){
+#'   # 
+#'   #   out_lue_vcmax <- lue_vcmax_none(
+#'   #     out_optchi,
+#'   #     kphio,
+#'   #     c_molmass,
+#'   #     soilmstress
+#'   #   )
+#'   # 
+#'   # } else {
+#'   # 
+#'   #   stop("rpmodel(): argument method_jmaxlim not idetified.")
+#'   # 
+#'   # }
+#'   # 
+#'   
+#'   # 5.0 CALCULATE the assimilation rate
+#' 
+#'   # acclimated Ac with the acclimated xiPa term
+#'   # a_c = vcmaxAdjusted * out_optchi$mc  #[umol m-2 s-1]
+#'   a_c = vcmaxAdjusted * (ci_inst - gammastar) / (ci_inst + kmm)#[umol m-2 s-1]
+#'   
+#'   # acclimated AJ with the acclimated xiPa term
+#'   # a_j = phi0 * fapar * ppfd * out_optchi$mj * jmaxAdjusted  #[umol m-2 s-1]
+#'   J = (4 *phi0*fapar * ppfd)/sqrt(1 + ((4*phi0*fapar * ppfd)/(jmaxAdjusted))^(2))
+#'   a_j = J/4*(ci_inst - gammastar)/(ci_inst + 2.0 * gammastar)
+#'   
+#'   #---- Corrolary preditions ---------------------------------------------------
+#'   # 6.0 Vcmax25 (vcmax normalized to 25 deg C)
+#'   ftemp25_inst_vcmax  <- ftemp_inst_vcmax( tcleaf, tcleaf_opt, tcref = 25.0 )
+#'   vcmax25  <- vcmax_opt / ftemp25_inst_vcmax
+#'   
+#'   
+#'   ## 7.0  Dark respiration at growth temperature
+#'   ftemp_inst_rd <- ftemp_inst_rd(tcleaf_opt)
+#'   rd  <- rd_to_vcmax * (ftemp_inst_rd / ftemp25_inst_vcmax) * vcmax_opt
+#' 
+#'   
+#'   # 8.0 Assimilation
+#'   assim <- ifelse(a_j < a_c , a_j, a_c)
+#'   # assim_eq_check <- all.equal(assim, gpp/c_molmass, tol = 0.001)
+#'   # if (! isTRUE(assim_eq_check)) {
+#'   #   warning("rpmodel_subdaily(): Assimilation and GPP are not identical.\n",
+#'   #           assim_eq_check)
+#'   # }
+#'   # Gross Primary Productivity
+#'   gpp <- assim * c_molmass  # in ug C m-2 s-1
+#'   
+#'   ## 9.0  average stomatal conductance
+#'   gs <- assim/(ca - ci_inst)
+#'   e <- 1.6*gs*vpd
+#'   
+#'   ## 10.0 calculate frost and heat cost ####
+#'   #Based in Villar y Merino - 2001 - Comparison of leaf construction costs in woody spe
+#'   # assim <- mapply(calculate_assimilation_lethal, leafwidth, tcleaf, LAI, assim)
+#'   
+#'   ## 11.0 construct list for output
+#'   out <- list(
+#'     gpp             = gpp,   # remove this again later
+#'     assim           = assim,
+#'     ca              = ca,
+#'     gammastar       = gammastar,
+#'     kmm             = kmm,
+#'     chi             = out_optchi$chi,
+#'     xi              = out_optchi$xi,
+#'     mj              = out_optchi$mj,
+#'     mc              = out_optchi$mc,
+#'     ci              = ci_inst,
+#'     iwue            = iwue,
+#'     gs              = gs,
+#'     e               = e,
+#'     vcmax           = vcmaxAdjusted,
+#'     jmax            = jmaxAdjusted,
+#'     vcmax25         = vcmax25,
+#'     rd              = rd,
+#'     vpd_leaf        = vpd,
+#'     ns_star         = ns_star
+#'   )
+#'   
+#'   return(out)
+#'   
+#'   
+#' }
 
 
 energy_balance_2layers <- function(tcleaf_sun, tcleaf_opt, tcleaf_shade, 
@@ -1282,82 +1282,82 @@ energy_balance_2layers <- function(tcleaf_sun, tcleaf_opt, tcleaf_shade,
 }
 
 
-
-
-energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd, 
-                           ppfd_opt, fapar, fapar_opt, ca, 
-                           ca_opt, xi, xiPa, patm, ns_star_opt, 
-                           gammastar, gammastar_opt, kmm, 
-                           kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
-                           method_jmaxlim, c4, rd_to_vcmax, 
-                           beta, c_cost, u, canopy_height,
-                           tc, tk, tkleaf, z, LAI, ustar, netrad, ga, mol_gas_const,
-                           J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
-                           epsleaf, epssky, frac_PAR, fanir, ei, ea, gb_method, 
-                           leafwidth){
-  df_res <- rpmodel_jmax_vcmax(tcleaf=tcleaf_root, tcleaf_opt = tcleaf_opt, vpd = vpd_new, ppfd = ppfd, 
-                               ppfd_opt = ppfd_opt, fapar = fapar, fapar_opt = fapar_opt, ca = ca, 
-                               ca_opt = ca_opt, xi = xi, xiPa = xiPa, patm = patm, ns_star_opt = ns_star_opt, 
-                               gammastar = gammastar, gammastar_opt = gammastar_opt, kmm = kmm, 
-                               kmm_opt = kmm_opt, kphio = kphio, soilmstress = soilmstress, 
-                               method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
-                               beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI,
-                               vcmax_opt=vcmax_opt, jmax_opt = jmax_opt)
-  
-  #Latent Heat Loss calculation
-  if(is.na(df_res$gs)){df_res$gs = 0}
-  if(length(df_res$gs) == 0){df_res$gs = 0}
-  if(is.infinite(df_res$gs)&df_res$gs>0){df_res$gs = 100} 
-  if(is.infinite(df_res$gs)&df_res$gs<0){df_res$gs = 0}
-  gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
-  
-  if(is.na(ustar)){
-    ust <- calc_ustar(u, canopy_height, z, LAI)
-  }else{
-    ust <- ustar
-  }
-  
-  # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
-  
-  if(is.na(ga)){
-    gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
-                 tc, z, LAI, patm, mol_gas_const, rho, tk, gb_method, leafwidth) 
-    gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
-  }else{
-    gbh = ga
-    gb = gbh/0.92
-  }
-  gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
-  gbs = gs * gb/(gs + gb)
-  
-  E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
-  lE = lat_heat*mol_mas_wv*E
-  
-  
-  #Shortwave Energy Input
-  Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
-  Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
-  Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
-  
-  #Thermal Infrared Input
-  epssky = 1.72 * ((ea*1e-3)/tk)^0.143
-  Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
-  
-  #Thermal Infra-Red Losses
-  Qtirleaf = epsleaf*sigma*tkleaf^4
-  # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
-  # Qtirleaf = epsleaf*epssky*sigma*tkleaf^4
-  
-  Rnet = Qsw + Qtir - Qtirleaf
-  
-  #Convective Heat Exchange
-  cp_vol = CP*rho
-  Qc = gbh*cp_vol*(tcleaf_root-tc)
-  
-  
-  return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))
-}
-
+# 
+# 
+# energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd, 
+#                            ppfd_opt, fapar, fapar_opt, ca, 
+#                            ca_opt, xi, xiPa, patm, ns_star_opt, 
+#                            gammastar, gammastar_opt, kmm, 
+#                            kmm_opt, kphio, vcmax_opt,jmax_opt, soilmstress, 
+#                            method_jmaxlim, c4, rd_to_vcmax, 
+#                            beta, c_cost, u, canopy_height,
+#                            tc, tk, tkleaf, z, LAI, ustar, netrad, ga, mol_gas_const,
+#                            J_to_mol, lat_heat, mol_mas_wv, sigma, cpm, CP, rho,
+#                            epsleaf, epssky, frac_PAR, fanir, ei, ea, gb_method, 
+#                            leafwidth){
+#   df_res <- rpmodel_jmax_vcmax(tcleaf=tcleaf_root, tcleaf_opt = tcleaf_opt, vpd = vpd_new, ppfd = ppfd, 
+#                                ppfd_opt = ppfd_opt, fapar = fapar, fapar_opt = fapar_opt, ca = ca, 
+#                                ca_opt = ca_opt, xi = xi, xiPa = xiPa, patm = patm, ns_star_opt = ns_star_opt, 
+#                                gammastar = gammastar, gammastar_opt = gammastar_opt, kmm = kmm, 
+#                                kmm_opt = kmm_opt, kphio = kphio, soilmstress = soilmstress, 
+#                                method_jmaxlim = method_jmaxlim, c4 = c4, rd_to_vcmax = rd_to_vcmax, 
+#                                beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI,
+#                                vcmax_opt=vcmax_opt, jmax_opt = jmax_opt)
+#   
+#   #Latent Heat Loss calculation
+#   if(is.na(df_res$gs)){df_res$gs = 0}
+#   if(length(df_res$gs) == 0){df_res$gs = 0}
+#   if(is.infinite(df_res$gs)&df_res$gs>0){df_res$gs = 100} 
+#   if(is.infinite(df_res$gs)&df_res$gs<0){df_res$gs = 0}
+#   gs = df_res$gs*1.6*1e-6 #stomatal conductance for water
+#   
+#   if(is.na(ustar)){
+#     ust <- calc_ustar(u, canopy_height, z, LAI)
+#   }else{
+#     ust <- ustar
+#   }
+#   
+#   # if(!is.na(u)&!is.na(canopy_height)&!is.na(tc)&!is.na(z)&!is.na(LAI)&!is.na(d)){
+#   
+#   if(is.na(ga)){
+#     gb = calc_ga(ws=u, ust = ust, canopy_height = canopy_height, tcleaf_root,
+#                  tc, z, LAI, patm, mol_gas_const, rho, tk, gb_method, leafwidth) 
+#     gbh = 0.92*gb #boundary layer conductance for heat (Campbell and Norman 1998)
+#   }else{
+#     gbh = ga
+#     gb = gbh/0.92
+#   }
+#   gb = gb * patm/mol_gas_const/tk #mol m-2 s-1
+#   gbs = gs * gb/(gs + gb)
+#   
+#   E = gbs*(vpd_new)*patm/(patm-(ei+ea)/2) #Farquhar and Sharkey 1984e-
+#   lE = lat_heat*mol_mas_wv*E
+#   
+#   
+#   #Shortwave Energy Input
+#   Rs_PAR_Wm2 = fapar*ppfd/(J_to_mol*frac_PAR)
+#   Rs_NIR_Wm2 = fanir*ppfd/(J_to_mol*frac_PAR) #approximation as for Escobedo et al. 2009 assuming PAR and NIR are equal
+#   Qsw = Rs_PAR_Wm2 + Rs_NIR_Wm2
+#   
+#   #Thermal Infrared Input
+#   epssky = 1.72 * ((ea*1e-3)/tk)^0.143
+#   Qtir = epsleaf*epssky*sigma*(tk^4) #sky and air
+#   
+#   #Thermal Infra-Red Losses
+#   Qtirleaf = epsleaf*sigma*tkleaf^4
+#   # Qtirleaf = 2*epsleaf*sigma*tkleaf^4
+#   # Qtirleaf = epsleaf*epssky*sigma*tkleaf^4
+#   
+#   Rnet = Qsw + Qtir - Qtirleaf
+#   
+#   #Convective Heat Exchange
+#   cp_vol = CP*rho
+#   Qc = gbh*cp_vol*(tcleaf_root-tc)
+#   
+#   
+#   return(tibble(Rnet, lE, Qc, Qtir, Qtirleaf, gb, ust))
+# }
+# 
 
 
 

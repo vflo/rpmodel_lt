@@ -62,7 +62,7 @@ dampen_vec <- function( vec, tau ){
 #'
 #' @param soilm Relative soil moisture as a fraction
 #' of field capacity (unitless). Defaults to 1.0 (no soil moisture stress).
-#' @param meanalpha Local annual mean ratio of actual over potential 
+#' @param meanalpha Local annual mean ratio of actual over potential
 #'  evapotranspiration, measure for average aridity. Defaults to 1.0.
 #' @param apar_soilm (Optional, used only if \code{do_soilmstress==TRUE})
 #'  Parameter determining the sensitivity of the empirical soil moisture stress
@@ -104,23 +104,36 @@ dampen_vec <- function( vec, tau ){
 #' @references  Stocker, B. et al. Geoscientific Model Development Discussions (in prep.)
 #'
 #' @export
-
+#'
+#'
+calc_soilmstress <- function(
+    soilm,
+    AI = 1
+    ){
+      
+      a <- pmin((0.62*AI^-0.45), 1)
+      b <- pmin((0.34*AI^-0.60), 1)
+      
+      outstress <- ifelse(soilm<=b,(a/b*soilm),a)
+      
+      return(outstress)
+    }
 # calc_soilmstress <- function(
 #   soilm,
 #   meanalpha = 1.0,
 #   apar_soilm = 0.0,
 #   bpar_soilm = 0.685
 # ){
-#   
+# 
 #   # Fixed parameters
 #   x0 <- 0.0
 #   x1 <- 0.6
-#   
+# 
 #   y0 <- (apar_soilm + bpar_soilm * meanalpha)
-#   
+# 
 #   beta <- (1.0 - y0) / (x0 - x1)^2
 #   outstress <- 1.0 - beta * ( soilm - x1 )^2
-#   
+# 
 #   ## bound between 0 and 1
 #   outstress <- pmin(pmax(outstress, 0), 1)
 #   # and set to 1.0 above soil moisture threshold x1.
@@ -1201,6 +1214,8 @@ calc_ga <- function(ws, ust, canopy_height, tcleaf_root,
 
 #' @export
 calc_new_vpd <- function(tnew, told, vpd){
+  #VPD in Pa !!!!!
+  #temperatures in ºC
   es = exp(34.494-4924.99/(told+237.1))/((told+105)^1.57)
   ea = es - vpd
   ei = exp(34.494-4924.99/(tnew+237.1))/((tnew+105)^1.57) #Pa https://journals.ametsoc.org/view/journals/apme/57/6/jamc-d-17-0334.1.xml
@@ -1221,16 +1236,3 @@ calc_air_density <- function(patm, tc){
 
 
 
-#' @export
-calc_soilmstress <- function(
-    soilm,
-    AI = 1
-){
-  
-  a <- pmin((0.62*AI^-0.45), 1)
-  b <- pmin((0.34*AI^-0.60), 1)
-  
-  outstress <- ifelse(soilm<=b,(a/b*soilm),a)
-  
-  return(outstress)
-}

@@ -122,7 +122,8 @@ rpmodel <- function(
 
 
 
-
+#'
+#' @export
 rpmodel_lt <- function(
     tc,
     vpd,

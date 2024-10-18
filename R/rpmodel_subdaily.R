@@ -652,7 +652,8 @@ rpmodel_subdaily <- function(
                               xi = DF$xi, xiPa = DF$xi_opt, patm = DF$patm, ns_star_opt = DF$ns_star_opt, 
                               gammastar = DF$gammastar, gammastar_opt = DF$gammastar_opt, kmm = DF$kmm, kmm_opt = DF$kmm_opt,
                               kphio = kphio, soilmstress = soilmstress, method_jmaxlim = method_jmaxlim, 
-                              do_phi0_arrh = do_phi0_arrh, PET_P = PET_P, mGDD0 = mGDD0, c4 = c4, rd_to_vcmax = rd_to_vcmax,
+                              do_phi0_arrh = do_phi0_arrh, PET_P = PET_P, mGDD0 = mGDD0, 
+                              c4 = c4, rd_to_vcmax = rd_to_vcmax,
                               beta = beta, c_cost = c_cost, leafwidth = leafwidth, LAI = LAI, vcmax_opt = DF$vcmax_opt, jmax_opt = DF$jmax_opt)
     
     
@@ -857,7 +858,7 @@ headerControl_dd <- function(df = dfToCheck, colMandatory = listMandatoryToCheck
 
 
 
-
+#' @export
 rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, fapar_opt, ca, ca_opt, xi, xiPa, patm, ns_star_opt,
                                gammastar, gammastar_opt, kmm, kmm_opt, kphio, soilmstress, method_jmaxlim,
                                do_phi0_arrh, PET_P, mGDD0, c4, rd_to_vcmax, beta, c_cost, leafwidth, LAI,vcmax_opt,jmax_opt){
@@ -1093,6 +1094,7 @@ rpmodel_jmax_vcmax <- function(tcleaf, tcleaf_opt, vpd, ppfd, ppfd_opt, fapar, f
 }
 
 
+#' @export
 energy_balance <- function(tcleaf_root, tcleaf_opt, vpd_new, ppfd, 
                            ppfd_opt, fapar, fapar_opt, ca, 
                            ca_opt, xi, xiPa, patm, ns_star_opt, 
